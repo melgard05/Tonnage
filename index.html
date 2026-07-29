@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0f10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Tonnage Log</title>
+<link rel="manifest" href='data:application/manifest+json,{"name":"Tonnage Log","short_name":"Tonnage","start_url":".","display":"standalone","background_color":"%230b0f10","theme_color":"%230b0f10"}'>
+<style>
+:root{
+  --bg:#0b0f10; --panel:#121819; --panel2:#0e1415; --line:#1e2a2c; --line2:#2b3a3d;
+  --tx:#cfd8d7; --dim:#7d8f8e; --dim2:#546566;
+  --acc:#5fd3a4; --acc-d:#1c3b32; --warn:#e0a458; --bad:#e06c60;
+  --rp:#5fd3a4; --rl:#6fa8dc;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--tx);font-family:var(--mono);font-size:14px;-webkit-text-size-adjust:100%}
+body{padding-bottom:env(safe-area-inset-bottom)}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer}
+::selection{background:var(--acc-d)}
+
+header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#0b0f10 70%,rgba(11,15,16,.9));border-bottom:1px solid var(--line);padding:10px 12px 0}
+.brand{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.brand h1{margin:0;font-size:13px;letter-spacing:.16em;text-transform:uppercase;font-weight:600}
+.brand .sub{color:var(--dim2);font-size:11px;letter-spacing:.08em}
+.spacer{flex:1}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim2);display:inline-block;flex:none}
+.dot.ok{background:var(--acc);box-shadow:0 0 8px var(--acc)}
+.dot.pend{background:var(--warn)}
+.dot.err{background:var(--bad)}
+#syncTxt{font-size:11px;color:var(--dim2)}
+.pill{display:flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line2);border-radius:99px;padding:4px 10px}
+.pill:hover{border-color:var(--acc)}
+.pill .bnum{font-size:10px;color:var(--dim2);border-left:1px solid var(--line2);padding-left:7px;letter-spacing:.06em}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.dot.live{animation:pulse 2.2s ease-in-out infinite}
+.statpanel{display:none;background:var(--panel);border:1px solid var(--line2);border-radius:4px;margin-top:8px;padding:10px 12px;font-size:12px;line-height:1.75}
+.statpanel.open{display:block}
+.statpanel .k{color:var(--dim2);display:inline-block;min-width:104px}
+.statpanel .who{display:flex;align-items:center;gap:7px;padding:2px 0}
+.statpanel .who i{width:7px;height:7px;border-radius:50%;background:var(--acc);flex:none}
+.statpanel .who i.off{background:var(--dim2)}
+.updbar{display:none;align-items:center;gap:10px;justify-content:center;flex-wrap:wrap;background:var(--acc-d);border-bottom:1px solid var(--acc);color:var(--acc);padding:9px 12px;font-size:12px;position:sticky;top:0;z-index:30}
+.updbar.show{display:flex}
+nav{display:flex;gap:2px;margin-top:10px;overflow-x:auto;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);padding:8px 12px;letter-spacing:.12em;font-size:11px;text-transform:uppercase;white-space:nowrap}
+nav button.on{color:var(--acc);border-bottom-color:var(--acc)}
+main{padding:14px 12px 60px;max-width:1150px;margin:0 auto}
+section{display:none}
+section.on{display:block}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:4px;margin-bottom:12px}
+.card>h2{margin:0;padding:9px 12px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--line);font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pad{padding:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2)}
+input,select,textarea{background:var(--panel2);border:1px solid var(--line2);border-radius:3px;padding:7px 8px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc-d)}
+input[type=number]{text-align:right}
+textarea{width:100%;min-height:110px;resize:vertical;line-height:1.5}
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:3px;padding:7px 12px;letter-spacing:.08em;font-size:11px;text-transform:uppercase;color:var(--tx)}
+.btn:hover{border-color:var(--acc);color:var(--acc)}
+.btn.pri{background:var(--acc-d);border-color:var(--acc);color:var(--acc)}
+.btn.on{background:var(--acc-d);border-color:var(--acc);color:var(--acc)}
+.btn.danger:hover{border-color:var(--bad);color:var(--bad)}
+.btn.sm{padding:4px 8px;font-size:10px}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);border:1px solid var(--line2);border-radius:99px;padding:2px 8px}
+.swatch{width:8px;height:8px;border-radius:2px;flex:none}
+.muted{color:var(--dim2)}
+.hint{color:var(--dim2);font-size:11px;line-height:1.6}
+.empty{padding:26px 14px;text-align:center;color:var(--dim2);font-size:12px;line-height:1.7}
+
+/* date button */
+.dbtn{display:inline-flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line2);border-radius:3px;padding:7px 11px;font-variant-numeric:tabular-nums}
+.dbtn:hover{border-color:var(--acc)}
+.dbtn .car{color:var(--dim2);font-size:10px}
+.dbtn.open{border-color:var(--acc);color:var(--acc)}
+
+/* calendar popover */
+.calpop{position:fixed;z-index:200;display:none;width:266px;background:var(--panel);border:1px solid var(--line2);border-radius:5px;box-shadow:0 14px 40px rgba(0,0,0,.6);padding:10px}
+.calpop.open{display:block}
+.calhead{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.calhead .lbl{flex:1;text-align:center;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.calhead button{background:none;border:1px solid var(--line2);border-radius:3px;color:var(--dim);width:26px;height:26px;line-height:1}
+.calhead button:hover{border-color:var(--acc);color:var(--acc)}
+.caldow,.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.calmon{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.caldow span{text-align:center;font-size:9px;letter-spacing:.06em;color:var(--dim2);padding:3px 0}
+.cell{position:relative;height:32px;border:1px solid transparent;border-radius:3px;background:none;color:var(--tx);font-variant-numeric:tabular-nums;font-size:12px}
+.calmon .cell{height:34px;font-size:11px;letter-spacing:.06em}
+.cell:disabled{color:transparent;cursor:default}
+.cell.wknd{color:var(--dim2)}
+.cell:hover:not(:disabled){border-color:var(--acc);color:var(--acc)}
+.cell.today{border-color:var(--line2)}
+.cell.sel{background:var(--acc-d);border-color:var(--acc);color:var(--acc)}
+.cell.inrange{background:#14231f}
+.cell .mk{position:absolute;left:50%;transform:translateX(-50%);bottom:3px;width:4px;height:4px;border-radius:50%;background:var(--acc)}
+.cell.sel .mk{background:var(--acc)}
+.calfoot{display:flex;gap:6px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+.calfoot button{flex:1}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;background:var(--line)}
+.stat{background:var(--panel);padding:11px 12px}
+.stat .k{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2)}
+.stat .v{font-size:21px;font-variant-numeric:tabular-nums;margin-top:3px}
+.stat .v small{font-size:11px;color:var(--dim);margin-left:3px}
+
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);font-weight:600;text-align:right;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child{text-align:left}
+td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+td:first-child{text-align:left;white-space:normal}
+tr.group td{background:var(--panel2);border-top:1px solid var(--line2);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx)}
+tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
+.wrap{overflow-x:auto}
+.bar{height:5px;border-radius:2px;min-width:1px;display:block;background:var(--acc)}
+.barcell{width:100px}
+.barcell>div{background:var(--panel2);border-radius:2px}
+
+/* split signature */
+.split{padding:16px 12px 4px}
+.splitbar{display:flex;height:56px;border-radius:4px;overflow:hidden;border:1px solid var(--line2)}
+.splitbar div{display:flex;align-items:center;justify-content:center;font-size:17px;font-variant-numeric:tabular-nums;color:#08110e;font-weight:600;transition:flex-basis .35s ease;min-width:0;overflow:hidden}
+.splitkey{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+.splitkey .k{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--dim)}
+.splitkey b{color:var(--tx);font-weight:500;font-variant-numeric:tabular-nums}
+.presets{display:flex;gap:5px;flex-wrap:wrap}
+
+.truckrow{border-bottom:1px solid var(--line);padding:10px 12px}
+.truckrow:last-child{border-bottom:0}
+.truckhead{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.unit{font-size:15px;letter-spacing:.04em}
+.truckhead .tons{margin-left:auto;font-size:15px;font-variant-numeric:tabular-nums}
+.truckhead .tons.zero{color:var(--dim2)}
+.tickets{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ticket{display:flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line2);border-left:2px solid var(--acc);border-radius:3px;padding:3px 4px 3px 8px;font-size:12px;font-variant-numeric:tabular-nums}
+.ticket .meta{color:var(--dim2);font-size:10px}
+.ticket button{background:none;border:0;color:var(--dim2);padding:0 4px;line-height:1}
+.ticket button:hover{color:var(--bad)}
+.addline{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.addline input.t{width:88px}
+.addline input.tk{width:104px}
+.facsel{display:inline-flex;border:1px solid var(--line2);border-radius:3px;overflow:hidden}
+.facbtn{background:var(--panel2);border:0;border-right:1px solid var(--line2);color:var(--dim);padding:0 11px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;height:33px}
+.facbtn:last-child{border-right:0}
+.facbtn:hover{color:var(--tx)}
+.facbtn.on{background:var(--acc-d);color:var(--acc)}
+.daynav{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.daynav .dow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--acc)}
+.daynav .dow.wknd{color:var(--warn)}
+
+.chart{width:100%;height:230px;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:12px;padding:10px 12px;border-top:1px solid var(--line)}
+.legend span{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim)}
+
+.list{display:flex;flex-direction:column}
+.item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.item:last-child{border-bottom:0}
+.item .grow{flex:1;min-width:120px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;background:var(--panel);border:1px solid var(--acc);color:var(--acc);padding:9px 16px;border-radius:3px;font-size:12px;z-index:300;opacity:0;pointer-events:none;transition:opacity .18s;max-width:92vw;text-align:center}
+.toast.show{opacity:1}
+.toast.bad{border-color:var(--bad);color:var(--bad)}
+@media (max-width:560px){
+  .stat .v{font-size:18px}
+  .addline input.t{width:74px}
+  .splitbar{height:48px}
+  .splitbar div{font-size:14px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="updbar" id="updBar">
+  <span id="updTxt"></span>
+  <button class="btn sm pri" id="updGo">Reload now</button>
+  <button class="btn sm" id="updLater">Later</button>
+</div>
+
+<header>
+  <div class="brand">
+    <h1>Tonnage Log</h1>
+    <span class="sub" id="fleetName">Steve's Sanitation</span>
+    <span class="spacer"></span>
+    <button class="pill" id="statusPill">
+      <span class="dot" id="syncDot"></span><span id="syncTxt">local only</span>
+      <span class="bnum" id="buildTag"></span>
+    </button>
+  </div>
+  <div class="statpanel" id="statusPanel"></div>
+  <nav>
+    <button data-tab="day" class="on">Day Entry</button>
+    <button data-tab="split">Split</button>
+    <button data-tab="month">Month</button>
+    <button data-tab="trend">Trend</button>
+    <button data-tab="fleet">Fleet</button>
+    <button data-tab="data">Data</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= DAY ENTRY ================= -->
+<section id="tab-day" class="on">
+  <div class="card">
+    <h2>Dump Sheet <span class="spacer"></span><span class="muted" id="dayUnitNote"></span></h2>
+    <div class="pad daynav">
+      <button class="btn sm" id="dPrev">&larr;</button>
+      <button class="dbtn" id="dPick"><span id="dPickTxt"></span><span class="car">&#9662;</span></button>
+      <button class="btn sm" id="dNext">&rarr;</button>
+      <button class="btn sm" id="dToday">Today</button>
+      <span class="dow" id="dDow"></span>
+    </div>
+    <div class="stats" id="dayStats"></div>
+    <div id="dayList"></div>
+  </div>
+  <div class="card" id="dayByCat"></div>
+</section>
+
+<!-- ================= SPLIT ================= -->
+<section id="tab-split">
+  <div class="card">
+    <h2>Roto-Pac vs Rear Load <span class="spacer"></span><span class="muted" id="rDays"></span></h2>
+    <div class="pad" style="display:flex;flex-direction:column;gap:10px">
+      <div class="row">
+        <span class="hint">From</span>
+        <button class="dbtn" id="rFrom"><span id="rFromTxt"></span><span class="car">&#9662;</span></button>
+        <span class="hint">to</span>
+        <button class="dbtn" id="rTo"><span id="rToTxt"></span><span class="car">&#9662;</span></button>
+        <button class="btn sm" id="rGo">Run range</button>
+      </div>
+      <div class="presets" id="rPresets"></div>
+    </div>
+    <div class="split">
+      <div class="splitbar" id="rBar"></div>
+      <div class="splitkey" id="rKey"></div>
+    </div>
+    <div class="stats" id="rStats" style="margin-top:14px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Against county delivered <span class="spacer"></span><span class="muted" id="rcNote"></span></h2>
+    <div id="rcRecon"></div>
+    <div class="pad hint" id="rcWarn"></div>
+  </div>
+
+  <div class="card">
+    <h2>Where it went <span class="spacer"></span><span class="muted" style="font-size:11px">tons by dumping facility</span></h2>
+    <div class="split">
+      <div class="splitbar" id="fBar"></div>
+      <div class="splitkey" id="fKey"></div>
+    </div>
+    <div class="wrap" style="margin-top:12px"><table id="fTable"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Category detail</h2>
+    <div class="wrap"><table id="rCatTable"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>By truck <span class="spacer"></span><button class="btn sm" id="rCsv">Export range CSV</button></h2>
+    <div class="wrap"><table id="rTruckTable"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Month by month in range</h2>
+    <div class="wrap"><table id="rMonthTable"></table></div>
+  </div>
+</section>
+
+<!-- ================= MONTH ================= -->
+<section id="tab-month">
+  <div class="card">
+    <h2>Monthly Tonnage</h2>
+    <div class="pad row">
+      <button class="btn sm" id="mPrev">&larr;</button>
+      <button class="dbtn" id="mPick"><span id="mPickTxt"></span><span class="car">&#9662;</span></button>
+      <button class="btn sm" id="mNext">&rarr;</button>
+      <button class="btn sm" id="mPull">Refresh from cloud</button>
+      <span class="spacer"></span>
+      <button class="btn sm" id="mCsvSum">Summary CSV</button>
+      <button class="btn sm" id="mCsvRaw">Loads CSV</button>
+    </div>
+    <div class="stats" id="mStats"></div>
+    <div class="wrap"><table id="mTable"></table></div>
+  </div>
+  <div class="card">
+    <h2>County delivered total <span class="spacer"></span><span class="muted" id="cMonthLbl"></span></h2>
+    <div class="pad row">
+      <label class="f">Tons reported by county
+        <input type="number" step="0.01" inputmode="decimal" id="cTons" placeholder="0.00" style="width:130px"></label>
+      <label class="f" style="flex:1;min-width:180px">Note (invoice #, facility, etc.)
+        <input id="cNote" placeholder="optional"></label>
+      <button class="btn pri" id="cSave">Save month</button>
+      <button class="btn sm danger" id="cClear">Clear</button>
+    </div>
+    <div class="pad hint" id="cMeta"></div>
+    <div id="cRecon"></div>
+  </div>
+  <div class="card">
+    <h2>Missing weekdays <span class="spacer"></span><span class="muted" style="font-size:11px">Mon&ndash;Fri with no load recorded</span></h2>
+    <div id="mGaps"></div>
+  </div>
+</section>
+
+<!-- ================= TREND ================= -->
+<section id="tab-trend">
+  <div class="card">
+    <h2>Tons by category <span class="spacer"></span>
+      <select id="tSpan"><option value="6">6 months</option><option value="12" selected>12 months</option><option value="24">24 months</option></select>
+      <button class="btn sm" id="tLoad">Load range</button>
+    </h2>
+    <svg class="chart" id="tChart" preserveAspectRatio="none"></svg>
+    <div class="legend" id="tLegend"></div>
+  </div>
+  <div class="card">
+    <h2>Month &times; category</h2>
+    <div class="wrap"><table id="tTable"></table></div>
+  </div>
+  <div class="card">
+    <h2>Per-truck monthly tons</h2>
+    <div class="wrap"><table id="tTruck"></table></div>
+  </div>
+</section>
+
+<!-- ================= FLEET ================= -->
+<section id="tab-fleet">
+  <div class="card">
+    <h2>Categories</h2>
+    <div class="list" id="catList"></div>
+    <div class="pad hint">Two categories cover this fleet. Rename or recolor them here; adding a third is possible but every report is built around the two-way split.</div>
+    <div class="pad row">
+      <input id="newCat" placeholder="Add another category" style="flex:1;min-width:160px">
+      <input type="color" id="newCatColor" value="#e0a458" style="padding:2px;width:44px">
+      <button class="btn" id="addCat">Add</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Trucks</h2>
+    <div class="list" id="truckList"></div>
+    <div class="pad row">
+      <input id="newUnit" placeholder="Unit #" style="width:100px">
+      <input id="newLabel" placeholder="Description (optional)" style="flex:1;min-width:140px">
+      <select id="newTruckCat"></select>
+      <button class="btn pri" id="addTruck">Add truck</button>
+    </div>
+    <div class="pad hint">Inactive trucks stay in history but drop off the dump sheet.</div>
+  </div>
+  <div class="card">
+    <h2>Dumping facilities</h2>
+    <div class="list" id="facList"></div>
+    <div class="pad row">
+      <input id="newFacName" placeholder="Full name" style="flex:1;min-width:160px">
+      <input id="newFacShort" placeholder="Button label" style="width:130px">
+      <button class="btn" id="addFac">Add facility</button>
+    </div>
+    <div class="pad hint">The button label is what shows on the dump sheet, so keep it short.</div>
+  </div>
+</section>
+
+<!-- ================= DATA ================= -->
+<section id="tab-data">
+  <div class="card" id="setupCard">
+    <h2>First-time setup <span class="spacer"></span><button class="btn sm" id="setupToggle">Show steps</button></h2>
+    <div class="pad" id="setupBody" style="display:none;line-height:1.75;font-size:12px;color:var(--dim)">
+      <p style="margin:0 0 10px"><b style="color:var(--tx)">You do not need Cloudflare or GitHub for this to work.</b> The app runs from wherever the file lives. Firebase is the only piece needed for two people to share the same numbers. GitHub Pages just gives the app a web address so a phone can open it &mdash; that part is optional but makes sharing much easier.</p>
+
+      <p style="margin:10px 0 4px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;font-size:10px">1 &mdash; Firebase (required for sharing)</p>
+      <ol style="margin:0;padding-left:18px">
+        <li>Go to console.firebase.google.com and create a project. Analytics can be off.</li>
+        <li>In the left menu: Build &rarr; Realtime Database &rarr; Create Database. Pick the US region and choose <b>Start in test mode</b>.</li>
+        <li>Copy the database URL at the top &mdash; it ends in <span style="color:var(--acc)">firebasedatabase.app</span> or <span style="color:var(--acc)">firebaseio.com</span>. Paste it into Cloud sync below and tick Sync enabled.</li>
+        <li>Open the <b>Rules</b> tab and paste the rules below, then Publish. Test mode expires after 30 days, so this step matters.</li>
+      </ol>
+      <div class="row" style="margin:8px 0">
+        <button class="btn sm" id="btnCopyRules">Copy database rules</button>
+        <span class="muted" style="font-size:11px">scopes access to your root path only</span>
+      </div>
+      <pre id="rulesBox" style="background:var(--panel2);border:1px solid var(--line2);border-radius:3px;padding:10px;overflow:auto;color:var(--tx);font-size:11px;margin:0"></pre>
+      <p style="margin:8px 0 0">Be straight with yourself about what these rules do: they keep anything outside your root path locked, but anyone who has the address can read and write the tonnage numbers. That is a reasonable trade for internal scale tickets. Do not put anything sensitive in here, and pick a root path nobody would guess &mdash; something like <span style="color:var(--acc)">tonnage-k4m9x2</span> rather than <span style="color:var(--acc)">tonnage</span>.</p>
+
+      <p style="margin:14px 0 4px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;font-size:10px">2 &mdash; GitHub Pages (optional, gives it a web address)</p>
+      <ol style="margin:0;padding-left:18px">
+        <li>On github.com create a new <b>public</b> repository, for example <span style="color:var(--acc)">tonnage</span>.</li>
+        <li>Add file &rarr; Create new file, name it <span style="color:var(--acc)">index.html</span>, paste in this whole file, and commit.</li>
+        <li>Settings &rarr; Pages &rarr; Source: Deploy from a branch, branch <span style="color:var(--acc)">main</span>, folder <span style="color:var(--acc)">/ (root)</span>. Save.</li>
+        <li>A minute later it is live at <span style="color:var(--acc)">yourname.github.io/tonnage</span>. Open that, finish the Firebase step, then use Copy setup link below.</li>
+      </ol>
+      <p style="margin:8px 0 0">A public repo means the code is public. The code holds no data and no password &mdash; but the setup link does, so never paste that link into the repo, an issue, or a commit.</p>
+
+      <p style="margin:14px 0 4px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;font-size:10px">3 &mdash; Your crew member</p>
+      <ol style="margin:0;padding-left:18px">
+        <li>Send them the setup link. They open it once and the app connects itself.</li>
+        <li>They name their device, then on iPhone tap Share &rarr; Add to Home Screen, or on Android the browser menu &rarr; Install app.</li>
+        <li>They enter loads on the dump sheet. You see them arrive live.</li>
+      </ol>
+      <p style="margin:10px 0 0">Skipping GitHub is fine too: keep the file on a shared drive and open it from there. Everything works except the update check and the one-tap setup link.</p>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Cloud sync</h2>
+    <div class="pad" style="display:flex;flex-direction:column;gap:10px">
+      <label class="f">Firebase Realtime Database URL
+        <input id="cfgUrl" placeholder="https://your-project-default-rtdb.firebaseio.com" spellcheck="false"></label>
+      <label class="f">Auth token (optional &mdash; leave blank for open rules)
+        <input id="cfgAuth" spellcheck="false"></label>
+      <label class="f">Root path
+        <input id="cfgRoot" placeholder="tonnage" spellcheck="false"></label>
+      <div class="row">
+        <label class="f" style="flex-direction:row;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:12px;color:var(--tx)">
+          <input type="checkbox" id="cfgSync" style="width:16px;height:16px"> Sync enabled</label>
+        <span class="spacer"></span>
+        <button class="btn" id="btnTest">Test connection</button>
+        <button class="btn" id="btnPush">Push all up</button>
+        <button class="btn" id="btnPull">Pull all down</button>
+      </div>
+      <div class="hint" id="pendNote"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Entry defaults</h2>
+    <div class="pad row">
+      <label class="f">Weight entered as
+        <select id="cfgUnit"><option value="ton">Net tons</option><option value="lb">Pounds</option></select></label>
+      <label class="f">Fleet name
+        <input id="cfgFleet" style="min-width:180px"></label>
+    </div>
+    <div class="pad hint">Pounds are converted to tons (&divide; 2000) on save. Everything is stored in net tons.</div>
+  </div>
+  <div class="card">
+    <h2>Import scale tickets</h2>
+    <div class="pad">
+      <div class="hint" style="margin-bottom:8px">Paste CSV with a header row. Recognized columns: <span style="color:var(--acc)">date, truck, tons</span> (or lbs/pounds/weight), ticket, site, material. Trucks match on unit number.</div>
+      <textarea id="csvIn" spellcheck="false" placeholder="date,truck,tons,ticket,site&#10;2026-07-06,204,8.42,118374,Otter Tail Landfill"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn pri" id="btnImport">Import</button>
+        <span class="hint" id="importNote"></span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Share with a crew member</h2>
+    <div class="pad" style="display:flex;flex-direction:column;gap:10px">
+      <label class="f">This device's name (shows on every load they enter)
+        <input id="cfgDevice" placeholder="e.g. Office, Shop iPad, Dan"></label>
+      <div class="row">
+        <button class="btn pri" id="btnShareLink">Copy setup link</button>
+        <button class="btn" id="btnPlainLink">Copy plain app link</button>
+      </div>
+      <div class="hint">The setup link carries the database address, root path and token in the link itself, so whoever opens it is connected with one tap &mdash; nothing to type. Anyone holding that link can read and write this data, so send it directly to the person, not to a group thread, and generate a new token if it gets loose.</div>
+      <div class="hint" id="shareNote"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Version</h2>
+    <div class="pad row">
+      <span class="hint" id="buildNote"></span>
+      <span class="spacer"></span>
+      <button class="btn sm" id="btnCheckUpd">Check for update</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Local data</h2>
+    <div class="pad row">
+      <button class="btn" id="btnBackup">Download JSON backup</button>
+      <button class="btn" id="btnSample">Load sample trucks</button>
+      <span class="spacer"></span>
+      <button class="btn danger" id="btnWipe">Erase local data</button>
+    </div>
+    <div class="pad hint" id="storeNote"></div>
+  </div>
+</section>
+
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Tonnage Log — single file, no dependencies.
+   Categories: Roto-Pac / Rear Load.
+   Storage: memory + localStorage cache + Firebase RTDB REST.
+   Live: EventSource stream on {root}/ctl (Firebase REST streaming).
+   Paths: {root}/cats {root}/trucks {root}/sites {root}/county
+          {root}/loads/{YYYY-MM}/{id}  {root}/ctl  {root}/presence/{dev}
+   ============================================================ */
+
+const BUILD = /*BUILD*/ 5;
+const BUILD_NOTES = "Named fleet, facility toggle, setup guide";
+
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const n2 = v => (Math.round((Number(v) || 0) * 100) / 100).toFixed(2);
+const n1 = v => (Math.round((Number(v) || 0) * 10) / 10).toFixed(1);
+const pct = (a, b) => b ? n1(a / b * 100) + "%" : "—";
+const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+const SEED_CATS = [
+  { id: "rotopac",  name: "Roto-Pac",  color: "#5fd3a4", order: 0 },
+  { id: "rearload", name: "Rear Load", color: "#6fa8dc", order: 1 }
+];
+const SEED_TRUCKS = [
+  { id: "t_twisted",     unit: "Twisted Sister",  label: "", catId: "rotopac",  active: true },
+  { id: "t_trashinator", unit: "Trashinator",     label: "", catId: "rotopac",  active: true },
+  { id: "t_optimus",     unit: "Optimus Grime",   label: "", catId: "rearload", active: true },
+  { id: "t_pacman",      unit: "Pac-Man",         label: "", catId: "rearload", active: true },
+  { id: "t_reaper",      unit: "Rubbish Reaper",  label: "", catId: "rearload", active: true }
+];
+const SEED_FACS = [
+  { id: "becker", name: "Becker Transfer",    short: "Becker", order: 0 },
+  { id: "perham", name: "Perham Incinerator", short: "Perham", order: 1 }
+];
+
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+  ok() { try { localStorage.setItem("__t", "1"); localStorage.removeItem("__t"); return true; } catch (e) { return false; } }
+};
+
+let CFG = Object.assign({ url: "", auth: "", root: "tonnage", sync: false, unit: "ton", fleet: "Steve's Sanitation", device: "", lastFac: "" }, LS.get("tl.cfg", {}));
+let DB = Object.assign({ cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {} }, LS.get("tl.db", {}));
+let PENDING = LS.get("tl.pend", []);
+let DEVICE_ID = LS.get("tl.devid", "");
+if (!DEVICE_ID) { DEVICE_ID = Math.random().toString(36).slice(2, 10); LS.set("tl.devid", DEVICE_ID); }
+function deviceName() { return CFG.device || ("device-" + DEVICE_ID.slice(0, 4)); }
+
+function isoToday() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); }
+function parseISO(s) { const p = s.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function toISO(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function monthLabel(m) { const p = m.split("-"); return MON[Number(p[1]) - 1] + " " + p[0]; }
+function longDate(iso) { const d = parseISO(iso); return DOW[d.getDay()] + " " + MON[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear(); }
+function shiftMonth(m, k) { const p = m.split("-").map(Number); const d = new Date(p[0], p[1] - 1 + k, 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
+function shiftDay(iso, k) { const d = parseISO(iso); d.setDate(d.getDate() + k); return toISO(d); }
+function monthsBetween(a, b) { const out = []; let m = a.slice(0, 7); const end = b.slice(0, 7); let guard = 0; while (m <= end && guard++ < 400) { out.push(m); m = shiftMonth(m, 1); } return out; }
+function saveLocal() { LS.set("tl.db", DB); LS.set("tl.cfg", CFG); LS.set("tl.pend", PENDING); }
+
+let VIEW = { day: isoToday(), month: isoToday().slice(0, 7), from: isoToday().slice(0, 7) + "-01", to: isoToday(), preset: "mtd" };
+
+let toastT;
+function toast(msg, bad) {
+  const t = $("#toast"); t.textContent = msg; t.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(toastT); toastT = setTimeout(() => { t.className = "toast"; }, 2600);
+}
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function stat(k, v, unit) { return '<div class="stat"><div class="k">' + esc(k) + '</div><div class="v">' + v + (unit ? '<small>' + unit + '</small>' : "") + '</div></div>'; }
+
+/* ============================================================
+   Firebase REST
+   ============================================================ */
+function fbUrl(path) {
+  const base = (CFG.url || "").replace(/\/+$/, "");
+  const root = (CFG.root || "tonnage").replace(/^\/+|\/+$/g, "");
+  return base + "/" + root + (path ? "/" + path : "") + ".json" + (CFG.auth ? "?auth=" + encodeURIComponent(CFG.auth) : "");
+}
+function syncOn() { return !!(CFG.sync && CFG.url); }
+async function fbSend(method, path, value) {
+  if (!syncOn()) return { skipped: true };
+  const opt = { method: method, headers: { "Content-Type": "application/json" } };
+  if (value !== undefined) opt.body = JSON.stringify(value);
+  const r = await fetch(fbUrl(path), opt);
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+async function fbGet(path) {
+  if (!syncOn()) return null;
+  const r = await fetch(fbUrl(path));
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+function push(path, value) {
+  if (!syncOn()) { setSync("local"); return; }
+  PENDING.push({ path: path, value: value, ts: Date.now() });
+  saveLocal(); flush();
+}
+let flushing = false;
+async function flush() {
+  if (flushing || !syncOn() || !PENDING.length) return;
+  flushing = true; setSync("pend");
+  try {
+    while (PENDING.length) { const job = PENDING[0]; await fbSend("PUT", job.path, job.value); PENDING.shift(); saveLocal(); }
+    setSync("ok");
+  } catch (e) { setSync("err", e.message); }
+  flushing = false; renderPend();
+}
+let SYNC_STATE = "local", SYNC_DETAIL = "", STREAM_OK = false;
+let LAST_CHANGE = null, PRESENCE = {}, REMOTE_BUILD = 0, UPD_BUILD = 0;
+
+function setSync(state, detail) { SYNC_STATE = state; SYNC_DETAIL = detail || ""; paintStatus(); }
+function paintStatus() {
+  const dot = $("#syncDot"), txt = $("#syncTxt");
+  let cls = "", label = "";
+  if (!syncOn()) { cls = ""; label = "local only"; }
+  else if (SYNC_STATE === "err") { cls = "err"; label = "sync error"; }
+  else if (PENDING.length) { cls = "pend"; label = PENDING.length + " queued"; }
+  else if (STREAM_OK) { cls = "ok live"; label = "live"; }
+  else { cls = "ok"; label = "synced"; }
+  dot.className = "dot " + cls;
+  txt.textContent = label;
+  $("#buildTag").textContent = "b" + BUILD;
+  if ($("#statusPanel").classList.contains("open")) paintPanel();
+}
+function online(p) { return p && (Date.now() - (p.at || 0)) < 18e4; }
+function paintPanel() {
+  const people = Object.keys(PRESENCE).map(k => Object.assign({ id: k }, PRESENCE[k]))
+    .sort((a, b) => (b.at || 0) - (a.at || 0));
+  const live = people.filter(online);
+  let h = '<div><span class="k">Connection</span>' +
+    (!syncOn() ? '<span class="muted">local only &mdash; nothing is shared</span>'
+      : SYNC_STATE === "err" ? '<span style="color:var(--bad)">error' + (SYNC_DETAIL ? " · " + esc(SYNC_DETAIL) : "") + '</span>'
+        : STREAM_OK ? '<span style="color:var(--acc)">live &mdash; changes arrive as they happen</span>'
+          : '<span style="color:var(--warn)">connected, live stream down &mdash; falling back to polling</span>') + '</div>' +
+    '<div><span class="k">This device</span>' + esc(deviceName()) + '</div>' +
+    '<div><span class="k">Build</span>b' + BUILD + (UPD_BUILD > BUILD ? ' <span style="color:var(--acc)">· b' + UPD_BUILD + ' available</span>' : "") + '</div>' +
+    '<div><span class="k">Queued writes</span>' + (PENDING.length || "none") + '</div>';
+  if (LAST_CHANGE) {
+    h += '<div><span class="k">Last change</span>' + esc(LAST_CHANGE.by || "?") +
+      ' · ' + new Date(LAST_CHANGE.at).toLocaleTimeString() +
+      (LAST_CHANGE.kind ? ' · ' + esc(LAST_CHANGE.kind) : "") + '</div>';
+  }
+  if (syncOn()) {
+    h += '<div style="margin-top:6px"><span class="k">On this board</span></div>';
+    h += people.length ? people.slice(0, 8).map(p =>
+      '<div class="who"><i class="' + (online(p) ? "" : "off") + '"></i>' + esc(p.name || "unnamed") +
+      '<span class="muted">' + (online(p) ? "now" : "last seen " + new Date(p.at || 0).toLocaleString()) +
+      (p.build && p.build !== BUILD ? " · b" + p.build : "") + '</span></div>').join("")
+      : '<div class="who muted">just you so far</div>';
+    if (live.length > 1) h += '<div class="hint" style="margin-top:4px">' + live.length + ' devices connected.</div>';
+  }
+  $("#statusPanel").innerHTML = h;
+}
+$("#statusPill").onclick = () => {
+  const p = $("#statusPanel");
+  p.classList.toggle("open");
+  if (p.classList.contains("open")) { paintPanel(); pullPresence(); }
+};
+
+/* ---------- change beacon ---------- */
+let LAST_SELF_REV = 0;
+function bump(kind, month) {
+  if (!syncOn()) return;
+  const rec = { rev: Date.now(), at: Date.now(), by: deviceName(), src: DEVICE_ID, build: BUILD, kind: kind || "", month: month || "" };
+  LAST_SELF_REV = rec.rev; LAST_CHANGE = rec;
+  push("ctl", rec);
+}
+
+/* ---------- live stream (Firebase REST streaming via EventSource) ---------- */
+let ES = null, esRetry = 0, esTimer = null;
+function stopStream() {
+  if (ES) { try { ES.close(); } catch (e) { } ES = null; }
+  clearTimeout(esTimer); STREAM_OK = false; paintStatus();
+}
+function startStream() {
+  stopStream();
+  if (!syncOn() || typeof EventSource === "undefined") return;
+  let es;
+  try { es = new EventSource(fbUrl("ctl")); } catch (e) { return; }
+  ES = es;
+  es.addEventListener("put", ev => { STREAM_OK = true; esRetry = 0; paintStatus(); onCtl(ev); });
+  es.addEventListener("patch", ev => { STREAM_OK = true; onCtl(ev); });
+  es.addEventListener("keep-alive", () => { STREAM_OK = true; paintStatus(); });
+  es.addEventListener("cancel", () => { stopStream(); });
+  es.addEventListener("auth_revoked", () => { stopStream(); setSync("err", "token expired"); });
+  es.onopen = () => { STREAM_OK = true; esRetry = 0; paintStatus(); };
+  es.onerror = () => {
+    STREAM_OK = false; paintStatus();
+    if (ES !== es) return;
+    try { es.close(); } catch (e) { }
+    ES = null;
+    const wait = Math.min(30000, 1500 * Math.pow(2, esRetry++));
+    esTimer = setTimeout(startStream, wait);
+  };
+}
+async function onCtl(ev) {
+  let d; try { d = JSON.parse(ev.data); } catch (e) { return; }
+  const c = d && d.data;
+  if (!c || typeof c !== "object") return;
+  LAST_CHANGE = c;
+  if (c.build && c.build > BUILD) offerUpdate(c.build);
+  if (c.src === DEVICE_ID) { paintStatus(); return; }   // our own write echoing back
+  if (c.kind === "open") { pullPresence(); paintStatus(); return; }
+  try {
+    if (c.kind === "load" && c.month) await ensureMonth(c.month, true);
+    else if (c.kind === "county") { const v = await fbGet("county"); DB.county = v || {}; saveLocal(); }
+    else if (c.kind === "fleet") {
+      const a = await fbGet("cats"), b = await fbGet("trucks"), f = await fbGet("facs");
+      if (a) DB.cats = a; if (b) DB.trucks = b; if (f) DB.facs = f;
+      seedCats(); saveLocal();
+    }
+    renderAll();
+    toast("Updated by " + (c.by || "another device"));
+  } catch (e) { setSync("err", e.message); }
+}
+
+/* ---------- presence ---------- */
+async function beat() {
+  if (!syncOn()) return;
+  try { await fbSend("PUT", "presence/" + DEVICE_ID, { name: deviceName(), at: Date.now(), build: BUILD }); } catch (e) { }
+}
+async function pullPresence() {
+  if (!syncOn()) return;
+  try { const v = await fbGet("presence"); PRESENCE = v || {}; paintStatus(); } catch (e) { }
+}
+setInterval(() => { beat(); }, 45000);
+setInterval(() => { pullPresence(); }, 90000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  beat(); pullPresence(); checkUpdate();
+  if (syncOn() && !STREAM_OK) startStream();
+});
+
+/* ---------- update notification ---------- */
+function offerUpdate(b) {
+  if (!b || b <= BUILD || b <= UPD_BUILD) return;
+  UPD_BUILD = b;
+  $("#updTxt").textContent = "Build " + b + " is available — you're on build " + BUILD + ".";
+  $("#updBar").classList.add("show");
+  paintStatus();
+}
+async function checkUpdate(loud) {
+  try {
+    const base = location.href.split("#")[0].split("?")[0];
+    const r = await fetch(base + "?v=" + Date.now(), { cache: "no-store" });
+    const t = await r.text();
+    const m = t.match(/\/\*BUILD\*\/\s*(\d+)/);
+    const b = m ? Number(m[1]) : 0;
+    LS.set("tl.updchk", Date.now());
+    if (b > BUILD) { offerUpdate(b); if (loud) toast("Build " + b + " available"); }
+    else if (loud) toast("You're on the newest build (b" + BUILD + ")");
+    renderVersion();
+  } catch (e) { if (loud) toast("Couldn't reach the app file to check", true); }
+}
+$("#updGo").onclick = () => location.reload(true);
+$("#updLater").onclick = () => $("#updBar").classList.remove("show");
+$("#btnCheckUpd").onclick = () => checkUpdate(true);
+setInterval(() => checkUpdate(false), 6e5);
+function renderVersion() {
+  const last = LS.get("tl.updchk", 0);
+  $("#buildNote").innerHTML = "Build <b style=\"color:var(--acc)\">" + BUILD + "</b> &mdash; " + esc(BUILD_NOTES) +
+    (last ? '<br><span class="muted">Last checked ' + new Date(last).toLocaleString() + "</span>" : "") +
+    (UPD_BUILD > BUILD ? '<br><span style="color:var(--acc)">Build ' + UPD_BUILD + " is live — reload to pick it up.</span>" : "");
+}
+
+/* ---------- setup guide ---------- */
+function rulesJSON() {
+  const root = (CFG.root || "tonnage").replace(/^\/+|\/+$/g, "");
+  return JSON.stringify({ rules: { ".read": false, ".write": false, [root]: { ".read": true, ".write": true } } }, null, 2);
+}
+function renderRules() { const b = $("#rulesBox"); if (b) b.textContent = rulesJSON(); }
+$("#setupToggle").onclick = () => {
+  const b = $("#setupBody"), open = b.style.display !== "none";
+  b.style.display = open ? "none" : "block";
+  $("#setupToggle").textContent = open ? "Show steps" : "Hide steps";
+  if (!open) renderRules();
+};
+$("#btnCopyRules").onclick = () => copyText(rulesJSON(), "Rules copied — paste into Firebase and Publish");
+
+/* ---------- share link ---------- */
+function shareLink() {
+  const payload = { u: CFG.url, r: CFG.root, a: CFG.auth, f: CFG.fleet };
+  return location.href.split("#")[0].split("?")[0] + "#s=" + btoa(JSON.stringify(payload)).replace(/=+$/, "");
+}
+async function copyText(s, okMsg) {
+  try { await navigator.clipboard.writeText(s); toast(okMsg); }
+  catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = s; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast(okMsg); } catch (e2) { toast("Copy failed — long-press to select", true); }
+    ta.remove();
+  }
+}
+$("#btnShareLink").onclick = () => {
+  if (!CFG.url) return toast("Set the database URL first", true);
+  copyText(shareLink(), "Setup link copied");
+  $("#shareNote").innerHTML = 'Link copied. When they open it, the app connects itself and asks them to name their device.';
+};
+$("#btnPlainLink").onclick = () => copyText(location.href.split("#")[0].split("?")[0], "App link copied");
+function adoptHash() {
+  const h = location.hash || "";
+  if (h.indexOf("#s=") !== 0) return false;
+  try {
+    const raw = h.slice(3);
+    const p = JSON.parse(atob(raw + "===".slice(0, (4 - raw.length % 4) % 4)));
+    if (!p.u) return false;
+    CFG.url = p.u; CFG.root = p.r || "tonnage"; CFG.auth = p.a || ""; CFG.sync = true;
+    if (p.f) CFG.fleet = p.f;
+    saveLocal();
+    history.replaceState(null, "", location.pathname);
+    return true;
+  } catch (e) { return false; }
+}
+function renderPend() { $("#pendNote").textContent = PENDING.length ? PENDING.length + " write(s) queued for upload. They retry automatically." : "No pending writes."; }
+setInterval(() => { if (PENDING.length) flush(); }, 20000);
+window.addEventListener("online", flush);
+
+/* ============================================================
+   Model
+   ============================================================ */
+function cats() { return Object.values(DB.cats).sort((a, b) => (a.order || 0) - (b.order || 0) || a.name.localeCompare(b.name)); }
+function trucks(activeOnly) {
+  return Object.values(DB.trucks).filter(t => !activeOnly || t.active !== false).sort((a, b) => {
+    const ca = DB.cats[a.catId], cb = DB.cats[b.catId];
+    return (ca ? ca.order || 0 : 99) - (cb ? cb.order || 0 : 99) ||
+      String(a.unit).localeCompare(String(b.unit), undefined, { numeric: true });
+  });
+}
+function facs() { return Object.values(DB.facs || {}).sort((a, b) => (a.order || 0) - (b.order || 0) || a.name.localeCompare(b.name)); }
+function facOf(l) {
+  const f = l && l.facId && DB.facs ? DB.facs[l.facId] : null;
+  if (f) return f;
+  return { id: l && l.facId ? l.facId : "", name: (l && l.site) || "Unrecorded", short: (l && l.site) || "—" };
+}
+function defaultFacId() { const fs = facs(); if (!fs.length) return ""; return DB.facs[CFG.lastFac] ? CFG.lastFac : fs[0].id; }
+function facTotals(loads) {
+  const out = {};
+  loads.forEach(l => { const id = l.facId || ""; out[id] = (out[id] || 0) + (Number(l.tons) || 0); });
+  return out;
+}
+function catOf(t) { return (t && DB.cats[t.catId]) || { id: "", name: "Unassigned", color: "#546566" }; }
+function monthLoads(m) { return Object.values(DB.loads[m] || {}); }
+function dayLoads(d) { return monthLoads(d.slice(0, 7)).filter(l => l.date === d); }
+function rangeLoads(a, b) {
+  const out = [];
+  monthsBetween(a, b).forEach(m => monthLoads(m).forEach(l => { if (l.date >= a && l.date <= b) out.push(l); }));
+  return out;
+}
+function saveLoad(rec) { const m = rec.date.slice(0, 7); DB.loads[m] = DB.loads[m] || {}; DB.loads[m][rec.id] = rec; saveLocal(); push("loads/" + m + "/" + rec.id, rec); bump("load", m); }
+function deleteLoad(m, id) { if (DB.loads[m]) delete DB.loads[m][id]; saveLocal(); push("loads/" + m + "/" + id, null); bump("load", m); }
+function saveCat(c) { DB.cats[c.id] = c; saveLocal(); push("cats/" + c.id, c); bump("fleet"); }
+function saveTruck(t) { DB.trucks[t.id] = t; saveLocal(); push("trucks/" + t.id, t); bump("fleet"); }
+function saveFac(f) { DB.facs = DB.facs || {}; DB.facs[f.id] = f; saveLocal(); push("facs/" + f.id, f); bump("fleet"); }
+function countyRec(m) { return (DB.county || {})[m] || null; }
+function countyTons(m) { const r = countyRec(m); return r ? Number(r.tons) || 0 : 0; }
+function saveCounty(m, tons, note) {
+  DB.county = DB.county || {};
+  if (!tons) { delete DB.county[m]; saveLocal(); push("county/" + m, null); bump("county", m); return; }
+  const rec = { month: m, tons: Math.round(Number(tons) * 1000) / 1000, note: note || "", ts: Date.now(), by: deviceName() };
+  DB.county[m] = rec; saveLocal(); push("county/" + m, rec); bump("county", m);
+}
+function monthEnd(m) { const p = m.split("-").map(Number); return toISO(new Date(p[0], p[1], 0)); }
+/* tons per category for an arbitrary set of loads */
+function catTotals(loads) {
+  const out = {};
+  loads.forEach(l => { const t = DB.trucks[l.truckId]; const id = t && DB.cats[t.catId] ? t.catId : ""; out[id] = (out[id] || 0) + (Number(l.tons) || 0); });
+  return out;
+}
+/* shared reconciliation block: logged categories + county figure */
+function reconHTML(county, catTons, logged, label) {
+  const cl = cats().concat([{ id: "", name: "Unassigned", color: "#546566" }]).filter(c => catTons[c.id]);
+  if (!county) {
+    return '<div class="empty">No county figure recorded' + (label ? " for " + esc(label) : "") +
+      '.<br>Enter the delivered total above and the split against it appears here.</div>';
+  }
+  const unacc = Math.max(0, county - logged);
+  const over = logged - county;
+  const denom = Math.max(county, logged) || 1;
+  let bar = cl.map(c => {
+    const p = catTons[c.id] / denom * 100;
+    return '<div style="flex:' + p + ' 1 0;background:' + esc(c.color) + '" title="' + esc(c.name) + ' ' + n2(catTons[c.id]) + ' t">' + (p >= 9 ? pct(catTons[c.id], county) : "") + '</div>';
+  }).join("");
+  if (unacc > 0) bar += '<div style="flex:' + (unacc / denom * 100) + ' 1 0;background:#26383a;color:var(--dim)" title="Not in the log ' + n2(unacc) + ' t">' + (unacc / denom * 100 >= 9 ? pct(unacc, county) : "") + '</div>';
+  let key = cl.map(c => '<span class="k"><i class="swatch" style="background:' + esc(c.color) + '"></i>' + esc(c.name) +
+    ' <b>' + n2(catTons[c.id]) + ' t</b> · <b>' + pct(catTons[c.id], county) + '</b> of county</span>').join("");
+  if (unacc > 0) key += '<span class="k"><i class="swatch" style="background:#26383a"></i>Not in the log <b>' + n2(unacc) + ' t</b> · <b>' + pct(unacc, county) + '</b></span>';
+  if (over > 0.005) key += '<span class="k" style="color:var(--warn)"><i class="swatch" style="background:var(--warn)"></i>Log exceeds county by <b style="color:var(--warn)">' + n2(over) + ' t</b> · <b style="color:var(--warn)">' + pct(over, county) + '</b></span>';
+  const stats =
+    stat("County delivered", n2(county), "tons") +
+    stat("Logged by truck", n2(logged), "tons") +
+    stat("Variance", (over > 0 ? "+" : "") + n2(over), "tons") +
+    stat("Log captures", pct(logged, county)) +
+    cl.map(c => stat(c.name + " of county", pct(catTons[c.id], county))).join("");
+  return '<div class="split"><div class="splitbar">' + bar + '</div><div class="splitkey">' + key + '</div></div>' +
+    '<div class="stats" style="margin-top:14px">' + stats + '</div>';
+}
+
+/* ============================================================
+   Calendar popover
+   ============================================================ */
+const CAL = { el: null, anchor: null, view: "", value: "", onPick: null, mode: "day", opts: null };
+function calEl() {
+  if (CAL.el) return CAL.el;
+  const d = document.createElement("div"); d.className = "calpop"; d.id = "calpop";
+  document.body.appendChild(d); CAL.el = d;
+  d.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.nav) { CAL.view = CAL.mode === "month" ? String(Number(CAL.view) + Number(b.dataset.nav)) : shiftMonth(CAL.view, Number(b.dataset.nav)); drawCal(); return; }
+    if (b.dataset.jump) { const v = b.dataset.jump; CAL.onPick(v); closeCal(); return; }
+    if (b.dataset.val) { CAL.onPick(b.dataset.val); closeCal(); }
+  });
+  return d;
+}
+function openCal(anchor, value, onPick, opts) {
+  const el = calEl();
+  if (CAL.anchor === anchor && el.classList.contains("open")) return closeCal();
+  closeCal();
+  CAL.anchor = anchor; CAL.value = value; CAL.onPick = onPick;
+  CAL.opts = opts || {}; CAL.mode = CAL.opts.mode || "day";
+  CAL.view = CAL.mode === "month" ? value.slice(0, 4) : value.slice(0, 7);
+  drawCal(); el.classList.add("open"); anchor.classList.add("open"); placeCal();
+  setTimeout(() => {
+    document.addEventListener("mousedown", outside, true);
+    document.addEventListener("keydown", onEsc, true);
+    window.addEventListener("resize", placeCal);
+    window.addEventListener("scroll", placeCal, true);
+  }, 0);
+}
+function closeCal() {
+  if (!CAL.el) return;
+  CAL.el.classList.remove("open");
+  if (CAL.anchor) CAL.anchor.classList.remove("open");
+  CAL.anchor = null;
+  document.removeEventListener("mousedown", outside, true);
+  document.removeEventListener("keydown", onEsc, true);
+  window.removeEventListener("resize", placeCal);
+  window.removeEventListener("scroll", placeCal, true);
+}
+function outside(e) { if (CAL.el && !CAL.el.contains(e.target) && (!CAL.anchor || !CAL.anchor.contains(e.target))) closeCal(); }
+function onEsc(e) { if (e.key === "Escape") closeCal(); }
+function placeCal() {
+  if (!CAL.anchor || !CAL.el) return;
+  const r = CAL.anchor.getBoundingClientRect(), h = CAL.el.offsetHeight || 300, w = CAL.el.offsetWidth || 266;
+  let top = r.bottom + 6; if (top + h > innerHeight - 8) top = Math.max(8, r.top - h - 6);
+  let left = Math.min(r.left, innerWidth - w - 8); left = Math.max(8, left);
+  CAL.el.style.top = top + "px"; CAL.el.style.left = left + "px";
+}
+function drawCal() {
+  const el = calEl(), o = CAL.opts || {};
+  if (CAL.mode === "month") {
+    const y = Number(CAL.view);
+    let h = '<div class="calhead"><button data-nav="-1">&lsaquo;</button><span class="lbl">' + y + '</span><button data-nav="1">&rsaquo;</button></div><div class="calmon">';
+    for (let i = 0; i < 12; i++) {
+      const v = y + "-" + String(i + 1).padStart(2, "0");
+      h += '<button class="cell' + (v === CAL.value ? " sel" : "") + (v === isoToday().slice(0, 7) ? " today" : "") + '" data-val="' + v + '">' + MON[i] + '</button>';
+    }
+    h += '</div><div class="calfoot"><button class="btn sm" data-jump="' + isoToday().slice(0, 7) + '">This month</button></div>';
+    el.innerHTML = h; return;
+  }
+  const p = CAL.view.split("-").map(Number), y = p[0], mo = p[1];
+  const first = new Date(y, mo - 1, 1), days = new Date(y, mo, 0).getDate(), lead = first.getDay();
+  const marks = {}; monthLoads(CAL.view).forEach(l => marks[l.date] = 1);
+  let h = '<div class="calhead"><button data-nav="-1">&lsaquo;</button><span class="lbl">' + MON[mo - 1] + " " + y + '</span><button data-nav="1">&rsaquo;</button></div>' +
+    '<div class="caldow">' + ["S","M","T","W","T","F","S"].map(d => "<span>" + d + "</span>").join("") + '</div><div class="calgrid">';
+  for (let i = 0; i < lead; i++) h += '<button class="cell" disabled></button>';
+  for (let d = 1; d <= days; d++) {
+    const iso = y + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+    const w = new Date(y, mo - 1, d).getDay();
+    const cls = ["cell"];
+    if (w === 0 || w === 6) cls.push("wknd");
+    if (iso === isoToday()) cls.push("today");
+    if (iso === CAL.value) cls.push("sel");
+    if (o.rangeFrom && o.rangeTo && iso > o.rangeFrom && iso < o.rangeTo) cls.push("inrange");
+    h += '<button class="' + cls.join(" ") + '" data-val="' + iso + '">' + d + (marks[iso] ? '<i class="mk"></i>' : "") + '</button>';
+  }
+  h += '</div><div class="calfoot"><button class="btn sm" data-jump="' + isoToday() + '">Today</button>' +
+    (o.quick ? o.quick.map(q => '<button class="btn sm" data-jump="' + q.v + '">' + q.k + '</button>').join("") : "") + '</div>';
+  el.innerHTML = h;
+}
+
+/* ============================================================
+   Tabs
+   ============================================================ */
+$$("nav button").forEach(b => b.onclick = () => {
+  closeCal();
+  $$("nav button").forEach(x => x.classList.toggle("on", x === b));
+  $$("main section").forEach(s => s.classList.toggle("on", s.id === "tab-" + b.dataset.tab));
+  if (b.dataset.tab === "month") renderMonth();
+  if (b.dataset.tab === "split") renderSplit();
+  if (b.dataset.tab === "fleet") renderFleet();
+  if (b.dataset.tab === "trend") renderTrend();
+});
+
+/* ============================================================
+   DAY ENTRY
+   ============================================================ */
+function renderDay() {
+  const date = VIEW.day;
+  $("#dPickTxt").textContent = longDate(date);
+  const w = parseISO(date).getDay();
+  const dow = $("#dDow");
+  dow.textContent = (w === 0 || w === 6) ? "weekend · not a route day" : "";
+  dow.className = "dow wknd";
+  $("#dayUnitNote").textContent = CFG.unit === "lb" ? "entering pounds" : "entering net tons";
+
+  const loads = dayLoads(date), byTruck = {};
+  loads.forEach(l => (byTruck[l.truckId] = byTruck[l.truckId] || []).push(l));
+  const tot = loads.reduce((s, l) => s + (Number(l.tons) || 0), 0);
+
+  $("#dayStats").innerHTML =
+    stat("Day total", n2(tot), "tons") +
+    stat("Loads", loads.length) +
+    stat("Trucks reporting", Object.keys(byTruck).length + " / " + trucks(true).length) +
+    stat("Avg per load", loads.length ? n2(tot / loads.length) : "—", "t");
+
+  const list = $("#dayList"), ts = trucks(true);
+  if (!ts.length) {
+    list.innerHTML = '<div class="empty">No trucks yet.<br>Add them under <b>Fleet</b>, or load sample trucks from <b>Data</b>.</div>';
+    $("#dayByCat").innerHTML = ""; return;
+  }
+  let lastCat = null, html = "";
+  ts.forEach(t => {
+    const c = catOf(t);
+    if (c.id !== lastCat) {
+      lastCat = c.id;
+      html += '<div class="truckrow" style="padding:6px 12px;background:var(--panel2)"><span class="tag"><i class="swatch" style="background:' + esc(c.color) + '"></i>' + esc(c.name) + '</span></div>';
+    }
+    const mine = byTruck[t.id] || [], sum = mine.reduce((s, l) => s + (Number(l.tons) || 0), 0);
+    html += '<div class="truckrow" data-truck="' + t.id + '">' +
+      '<div class="truckhead"><span class="unit">' + esc(t.unit) + '</span>' +
+      (t.label ? '<span class="muted" style="font-size:11px">' + esc(t.label) + '</span>' : "") +
+      '<span class="tons' + (sum ? "" : " zero") + '">' + (sum ? n2(sum) + ' <span class="muted" style="font-size:11px">t</span>' : "—") + '</span></div>' +
+      (mine.length ? '<div class="tickets">' + mine.map(l =>
+        '<span class="ticket" style="border-left-color:' + esc(c.color) + '" title="' + esc(l.by ? "entered by " + l.by : "") + (l.ts ? " " + new Date(l.ts).toLocaleString() : "") + '">' + n2(l.tons) +
+        '<span class="meta">' + [esc(facOf(l).short || ""), l.ticket ? "#" + esc(l.ticket) : "", esc(l.material || ""), l.by && l.by !== deviceName() ? esc(l.by) : ""].filter(Boolean).join(" · ") + '</span>' +
+        '<button data-del="' + l.id + '" title="Remove load">&times;</button></span>').join("") + '</div>' : "") +
+      '<div class="addline" data-fac="' + esc(defaultFacId()) + '">' +
+      '<input class="t" type="number" step="0.01" inputmode="decimal" placeholder="' + (CFG.unit === "lb" ? "lbs" : "tons") + '" data-f="tons">' +
+      '<input class="tk" placeholder="ticket #" data-f="ticket">' +
+      '<span class="facsel">' + facs().map(f => '<button type="button" class="facbtn' + (f.id === defaultFacId() ? " on" : "") + '" data-fid="' + f.id + '">' + esc(f.short || f.name) + '</button>').join("") + '</span>' +
+      '<select data-f="material"><option value="MSW">MSW</option><option value="Recycle">Recycle</option><option value="C&D">C&amp;D</option><option value="Demo">Demo</option><option value="Yard">Yard</option><option value="Other">Other</option></select>' +
+      '<button class="btn sm pri" data-add="' + t.id + '">Add load</button></div></div>';
+  });
+  list.innerHTML = html;
+
+  $$("#dayList .facbtn").forEach(b => b.onclick = () => {
+    const line = b.closest(".addline");
+    line.dataset.fac = b.dataset.fid;
+    $$(".facbtn", line).forEach(x => x.classList.toggle("on", x === b));
+  });
+  $$("#dayList [data-add]").forEach(b => b.onclick = () => addFromRow(b.closest(".truckrow")));
+  $$("#dayList input[data-f=tons],#dayList input[data-f=ticket]").forEach(i => i.onkeydown = e => { if (e.key === "Enter") addFromRow(i.closest(".truckrow")); });
+  $$("#dayList [data-del]").forEach(b => b.onclick = () => { deleteLoad(date.slice(0, 7), b.dataset.del); renderDay(); });
+
+  const cs = {};
+  loads.forEach(l => {
+    const c = catOf(DB.trucks[l.truckId]);
+    cs[c.name] = cs[c.name] || { tons: 0, loads: 0, color: c.color };
+    cs[c.name].tons += Number(l.tons) || 0; cs[c.name].loads++;
+  });
+  const keys = Object.keys(cs);
+  $("#dayByCat").innerHTML = keys.length
+    ? '<h2>Day split</h2><div class="wrap"><table><thead><tr><th>Category</th><th>Loads</th><th>Tons</th><th>Share</th></tr></thead><tbody>' +
+      keys.map(k => '<tr><td><span class="tag"><i class="swatch" style="background:' + esc(cs[k].color) + '"></i>' + esc(k) + '</span></td><td>' + cs[k].loads + '</td><td>' + n2(cs[k].tons) + '</td><td>' + pct(cs[k].tons, tot) + '</td></tr>').join("") +
+      '</tbody></table></div>' : "";
+}
+function addFromRow(row) {
+  const id = row.dataset.truck, tIn = $('input[data-f=tons]', row);
+  let val = parseFloat(tIn.value);
+  if (!isFinite(val) || val <= 0) { tIn.focus(); return toast("Enter a weight greater than zero", true); }
+  if (CFG.unit === "lb") val = val / 2000;
+  const line = $('.addline', row);
+  const facId = line ? (line.dataset.fac || defaultFacId()) : defaultFacId();
+  if (!facId) return toast("Add a dumping facility under Fleet first", true);
+  const fac = DB.facs[facId] || {};
+  const rec = { id: uid(), date: VIEW.day, truckId: id, tons: Math.round(val * 1000) / 1000,
+    ticket: $('input[data-f=ticket]', row).value.trim(), facId: facId, site: fac.name || "",
+    material: $('select[data-f=material]', row).value, ts: Date.now(), by: deviceName() };
+  CFG.lastFac = facId; saveLocal();
+  saveLoad(rec); renderDay();
+  const nx = $('.truckrow[data-truck="' + id + '"] input[data-f=tons]'); if (nx) nx.focus();
+}
+$("#dPick").onclick = () => openCal($("#dPick"), VIEW.day, v => { VIEW.day = v; ensureMonth(v.slice(0, 7)).then(renderDay); });
+$("#dPrev").onclick = () => { VIEW.day = shiftDay(VIEW.day, -1); ensureMonth(VIEW.day.slice(0, 7)).then(renderDay); };
+$("#dNext").onclick = () => { VIEW.day = shiftDay(VIEW.day, 1); ensureMonth(VIEW.day.slice(0, 7)).then(renderDay); };
+$("#dToday").onclick = () => { VIEW.day = isoToday(); ensureMonth(VIEW.day.slice(0, 7)).then(renderDay); };
+
+/* ============================================================
+   SPLIT (date range)
+   ============================================================ */
+const PRESETS = [
+  { k: "mtd", label: "Month to date", calc: () => [isoToday().slice(0, 7) + "-01", isoToday()] },
+  { k: "lastmo", label: "Last month", calc: () => { const m = shiftMonth(isoToday().slice(0, 7), -1); const p = m.split("-").map(Number); return [m + "-01", toISO(new Date(p[0], p[1], 0))]; } },
+  { k: "d30", label: "Last 30 days", calc: () => [shiftDay(isoToday(), -29), isoToday()] },
+  { k: "d90", label: "Last 90 days", calc: () => [shiftDay(isoToday(), -89), isoToday()] },
+  { k: "qtd", label: "Quarter to date", calc: () => { const d = parseISO(isoToday()); const q = Math.floor(d.getMonth() / 3) * 3; return [toISO(new Date(d.getFullYear(), q, 1)), isoToday()]; } },
+  { k: "ytd", label: "Year to date", calc: () => [isoToday().slice(0, 4) + "-01-01", isoToday()] },
+  { k: "lastyr", label: "Last year", calc: () => { const y = Number(isoToday().slice(0, 4)) - 1; return [y + "-01-01", y + "-12-31"]; } }
+];
+function renderPresets() {
+  $("#rPresets").innerHTML = PRESETS.map(p => '<button class="btn sm' + (VIEW.preset === p.k ? " on" : "") + '" data-p="' + p.k + '">' + p.label + '</button>').join("") +
+    '<button class="btn sm' + (VIEW.preset === "custom" ? " on" : "") + '" data-p="custom">Custom</button>';
+  $$("#rPresets [data-p]").forEach(b => b.onclick = async () => {
+    const p = PRESETS.find(x => x.k === b.dataset.p);
+    VIEW.preset = b.dataset.p;
+    if (p) { const r = p.calc(); VIEW.from = r[0]; VIEW.to = r[1]; }
+    await ensureRange(); renderSplit();
+  });
+}
+async function ensureRange(force) {
+  const ms = monthsBetween(VIEW.from, VIEW.to);
+  for (const m of ms) { try { await ensureMonth(m, force); } catch (e) { } }
+  if (force && syncOn()) { try { const c = await fbGet("county"); DB.county = c || {}; saveLocal(); } catch (e) { } }
+}
+function splitData() {
+  const loads = rangeLoads(VIEW.from, VIEW.to);
+  const cl = cats().concat([{ id: "", name: "Unassigned", color: "#546566" }]);
+  const agg = {}; cl.forEach(c => agg[c.id] = { cat: c, tons: 0, loads: 0, days: {}, trucks: {} });
+  loads.forEach(l => {
+    const t = DB.trucks[l.truckId], id = t && DB.cats[t.catId] ? t.catId : "";
+    const a = agg[id]; if (!a) return;
+    const v = Number(l.tons) || 0;
+    a.tons += v; a.loads++; a.days[l.date] = 1;
+    const tr = a.trucks[l.truckId] || (a.trucks[l.truckId] = { truck: t, tons: 0, loads: 0, days: {} });
+    tr.tons += v; tr.loads++; tr.days[l.date] = 1;
+  });
+  const list = cl.map(c => agg[c.id]).filter(a => a.tons || a.loads || DB.cats[a.cat.id]);
+  const tons = loads.reduce((s, l) => s + (Number(l.tons) || 0), 0);
+  const days = Object.keys(loads.reduce((a, l) => (a[l.date] = 1, a), {})).length;
+  return { list: list, tons: tons, loads: loads.length, days: days };
+}
+function renderSplit() {
+  $("#rFromTxt").textContent = longDate(VIEW.from);
+  $("#rToTxt").textContent = longDate(VIEW.to);
+  renderPresets();
+  const span = Math.round((parseISO(VIEW.to) - parseISO(VIEW.from)) / 864e5) + 1;
+  $("#rDays").textContent = span + " calendar day" + (span === 1 ? "" : "s");
+
+  const d = splitData();
+  const shown = d.list.filter(a => a.tons > 0);
+
+  $("#rBar").innerHTML = d.tons
+    ? shown.map(a => {
+        const p = a.tons / d.tons * 100;
+        return '<div style="flex:' + p + ' 1 0;background:' + esc(a.cat.color) + '" title="' + esc(a.cat.name) + ' ' + n2(a.tons) + ' t">' + (p >= 9 ? n1(p) + "%" : "") + '</div>';
+      }).join("")
+    : '<div style="flex:1;background:var(--panel2);color:var(--dim2);font-size:12px">No loads in this range</div>';
+
+  $("#rKey").innerHTML = shown.length
+    ? shown.map(a => '<span class="k"><i class="swatch" style="background:' + esc(a.cat.color) + '"></i>' + esc(a.cat.name) +
+        ' <b>' + n2(a.tons) + ' t</b> · <b>' + pct(a.tons, d.tons) + '</b> of tons · <b>' + pct(a.loads, d.loads) + '</b> of loads</span>').join("")
+    : '<span class="k muted">Pick a wider range, or add loads on the Day Entry tab.</span>';
+
+  $("#rStats").innerHTML =
+    stat("Range total", n2(d.tons), "tons") +
+    stat("Loads", d.loads) +
+    stat("Days with loads", d.days) +
+    stat("Avg per load", d.loads ? n2(d.tons / d.loads) : "—", "t") +
+    stat("Avg per day", d.days ? n2(d.tons / d.days) : "—", "t");
+
+  // facility breakdown + category x facility cross-tab
+  const rLoads = rangeLoads(VIEW.from, VIEW.to);
+  const fl = facs().concat([{ id: "", name: "Unrecorded", short: "Unrecorded" }]);
+  const fTot = facTotals(rLoads);
+  const fShown = fl.filter(f => fTot[f.id]);
+  const FCOL = ["#e0a458", "#c98bdb", "#6ecbd0", "#8fce6b", "#d9c46a"];
+  const fcolor = i => FCOL[i % FCOL.length];
+  $("#fBar").innerHTML = d.tons
+    ? fShown.map((f, i) => {
+        const p = fTot[f.id] / d.tons * 100;
+        return '<div style="flex:' + p + ' 1 0;background:' + (f.id ? fcolor(i) : "#26383a") + '" title="' + esc(f.name) + ' ' + n2(fTot[f.id]) + ' t">' + (p >= 9 ? n1(p) + "%" : "") + '</div>';
+      }).join("")
+    : '<div style="flex:1;background:var(--panel2);color:var(--dim2);font-size:12px">No loads in this range</div>';
+  $("#fKey").innerHTML = fShown.length
+    ? fShown.map((f, i) => '<span class="k"><i class="swatch" style="background:' + (f.id ? fcolor(i) : "#26383a") + '"></i>' + esc(f.name) +
+        ' <b>' + n2(fTot[f.id]) + ' t</b> · <b>' + pct(fTot[f.id], d.tons) + '</b></span>').join("")
+    : '<span class="k muted">Nothing recorded in this range.</span>';
+
+  const cross = {};
+  rLoads.forEach(l => {
+    const t = DB.trucks[l.truckId], cid = t && DB.cats[t.catId] ? t.catId : "";
+    const fid = l.facId || "";
+    (cross[cid] = cross[cid] || {})[fid] = (cross[cid][fid] || 0) + (Number(l.tons) || 0);
+  });
+  const catList = cats().concat([{ id: "", name: "Unassigned", color: "#546566" }]).filter(c => cross[c.id]);
+  let fh = '<thead><tr><th>Category</th>' + fShown.map(f => '<th>' + esc(f.short || f.name) + '</th>').join("") +
+    fShown.map(f => '<th>' + esc(f.short || f.name) + ' %</th>').join("") + '<th>Total</th></tr></thead><tbody>';
+  catList.forEach(c => {
+    const row = cross[c.id] || {}, rt = fShown.reduce((x, f) => x + (row[f.id] || 0), 0);
+    fh += '<tr><td><span class="tag" style="border-color:' + esc(c.color) + '"><i class="swatch" style="background:' + esc(c.color) + '"></i>' + esc(c.name) + '</span></td>' +
+      fShown.map(f => '<td>' + (row[f.id] ? n2(row[f.id]) : "—") + '</td>').join("") +
+      fShown.map(f => '<td class="muted">' + (rt ? pct(row[f.id] || 0, rt) : "—") + '</td>').join("") +
+      '<td>' + n2(rt) + '</td></tr>';
+  });
+  fh += '<tr class="total"><td>All trucks</td>' + fShown.map(f => '<td>' + n2(fTot[f.id]) + '</td>').join("") +
+    fShown.map(f => '<td>' + pct(fTot[f.id], d.tons) + '</td>').join("") + '<td>' + n2(d.tons) + '</td></tr></tbody>';
+  $("#fTable").innerHTML = catList.length ? fh : '<tbody><tr><td class="empty">No loads in this range.</td></tr></tbody>';
+
+  // county rollup across whole months inside the range
+  const allMonths = monthsBetween(VIEW.from, VIEW.to);
+  const whole = allMonths.filter(m => (m + "-01") >= VIEW.from && monthEnd(m) <= VIEW.to);
+  const partial = allMonths.filter(m => whole.indexOf(m) < 0);
+  const withFig = whole.filter(m => countyTons(m) > 0);
+  const missing = whole.filter(m => !countyTons(m));
+  const cSum = withFig.reduce((s, m) => s + countyTons(m), 0);
+  const cLoads = [];
+  withFig.forEach(m => monthLoads(m).forEach(l => cLoads.push(l)));
+  const cLogged = cLoads.reduce((s, l) => s + (Number(l.tons) || 0), 0);
+  $("#rcNote").textContent = withFig.length
+    ? withFig.length + " month" + (withFig.length === 1 ? "" : "s") + " compared"
+    : "no county figures in range";
+  $("#rcRecon").innerHTML = reconHTML(cSum, catTotals(cLoads), cLogged, "");
+  const warn = [];
+  if (partial.length) warn.push("Partial months skipped (county figures are monthly): " + partial.map(monthLabel).join(", ") + ".");
+  if (missing.length) warn.push("No county figure entered for " + missing.map(monthLabel).join(", ") + " — add it on the Month tab.");
+  $("#rcWarn").innerHTML = warn.length ? '<span style="color:var(--warn)">' + esc(warn.join(" ")) + '</span>' : "";
+
+  let h = '<thead><tr><th>Category</th><th>Trucks</th><th>Loads</th><th>Days</th><th>Avg/load</th><th>Avg/day</th><th>Net tons</th><th>% of tons</th><th>% of loads</th></tr></thead><tbody>';  d.list.forEach(a => {
+    const nd = Object.keys(a.days).length;
+    h += '<tr><td><span class="tag" style="border-color:' + esc(a.cat.color) + '"><i class="swatch" style="background:' + esc(a.cat.color) + '"></i>' + esc(a.cat.name) + '</span></td>' +
+      '<td>' + Object.keys(a.trucks).length + '</td><td>' + (a.loads || "—") + '</td><td>' + (nd || "—") + '</td>' +
+      '<td>' + (a.loads ? n2(a.tons / a.loads) : "—") + '</td><td>' + (nd ? n2(a.tons / nd) : "—") + '</td>' +
+      '<td>' + n2(a.tons) + '</td><td style="color:' + esc(a.cat.color) + '">' + pct(a.tons, d.tons) + '</td><td>' + pct(a.loads, d.loads) + '</td></tr>';
+  });
+  h += '<tr class="total"><td>Total</td><td></td><td>' + d.loads + '</td><td>' + d.days + '</td><td>' + (d.loads ? n2(d.tons / d.loads) : "—") + '</td><td>' + (d.days ? n2(d.tons / d.days) : "—") + '</td><td>' + n2(d.tons) + '</td><td>100.0%</td><td>100.0%</td></tr></tbody>';
+  $("#rCatTable").innerHTML = h;
+
+  // by truck
+  const max = Math.max.apply(null, [1].concat(d.list.map(a => Math.max.apply(null, [0].concat(Object.values(a.trucks).map(x => x.tons))))));
+  let th = '<thead><tr><th>Unit</th><th>Loads</th><th>Days</th><th>Avg/load</th><th>Net tons</th><th>% of category</th><th>% of fleet</th><th class="barcell"></th></tr></thead><tbody>';
+  let any = false;
+  d.list.forEach(a => {
+    const rows = trucks(false).filter(t => (t.catId || "") === a.cat.id && (t.active !== false || a.trucks[t.id]));
+    if (!rows.length) return;
+    any = true;
+    th += '<tr class="group"><td colspan="4"><span class="tag" style="border-color:' + esc(a.cat.color) + '"><i class="swatch" style="background:' + esc(a.cat.color) + '"></i>' + esc(a.cat.name) + '</span></td>' +
+      '<td>' + n2(a.tons) + '</td><td>' + (a.tons ? "100.0%" : "—") + '</td><td style="color:' + esc(a.cat.color) + '">' + pct(a.tons, d.tons) + '</td><td></td></tr>';
+    rows.forEach(t => {
+      const x = a.trucks[t.id] || { tons: 0, loads: 0, days: {} };
+      const nd = Object.keys(x.days).length;
+      th += '<tr><td>' + esc(t.unit) + (t.label ? ' <span class="muted" style="font-size:11px">' + esc(t.label) + '</span>' : "") + (t.active === false ? ' <span class="muted" style="font-size:10px">[inactive]</span>' : "") + '</td>' +
+        '<td>' + (x.loads || "—") + '</td><td>' + (nd || "—") + '</td><td>' + (x.loads ? n2(x.tons / x.loads) : "—") + '</td>' +
+        '<td>' + (x.tons ? n2(x.tons) : "—") + '</td><td>' + pct(x.tons, a.tons) + '</td><td>' + pct(x.tons, d.tons) + '</td>' +
+        '<td class="barcell"><div><span class="bar" style="width:' + (x.tons / max * 100) + '%;background:' + esc(a.cat.color) + '"></span></div></td></tr>';
+    });
+  });
+  th += '</tbody>';
+  $("#rTruckTable").innerHTML = any ? th : '<tbody><tr><td class="empty">No trucks configured.</td></tr></tbody>';
+
+  // month by month
+  const ms = monthsBetween(VIEW.from, VIEW.to);
+  const cl = d.list;
+  let mh = '<thead><tr><th>Month</th>' + cl.map(a => '<th>' + esc(a.cat.name) + '</th>').join("") +
+    '<th>Logged</th><th>County</th>' + cl.map(a => '<th>' + esc(a.cat.name) + ' % of county</th>').join("") +
+    '<th>Not in log</th><th>Capture</th></tr></thead><tbody>';
+  let mTot = 0, mCounty = 0;
+  const mCat = {};
+  ms.forEach(m => {
+    const ls = monthLoads(m).filter(l => l.date >= VIEW.from && l.date <= VIEW.to);
+    const per = catTotals(ls);
+    const tot = ls.reduce((s, l) => s + (Number(l.tons) || 0), 0);
+    const isWhole = (m + "-01") >= VIEW.from && monthEnd(m) <= VIEW.to;
+    const cty = isWhole ? countyTons(m) : 0;
+    mTot += tot; mCounty += cty;
+    cl.forEach(a => { if (cty) mCat[a.cat.id] = (mCat[a.cat.id] || 0) + (per[a.cat.id] || 0); });
+    const unacc = cty ? cty - tot : 0;
+    mh += '<tr><td>' + monthLabel(m) + (isWhole ? "" : ' <span class="muted" style="font-size:10px">partial</span>') + '</td>' +
+      cl.map(a => '<td>' + (per[a.cat.id] ? n2(per[a.cat.id]) : "—") + '</td>').join("") +
+      '<td>' + (tot ? n2(tot) : "—") + '</td>' +
+      '<td>' + (cty ? n2(cty) : '<span class="muted">—</span>') + '</td>' +
+      cl.map(a => '<td style="color:' + esc(a.cat.color) + '">' + (cty ? pct(per[a.cat.id] || 0, cty) : "—") + '</td>').join("") +
+      '<td style="color:' + (unacc < -0.005 ? "var(--warn)" : "var(--dim)") + '">' + (cty ? n2(unacc) : "—") + '</td>' +
+      '<td>' + (cty ? pct(tot, cty) : "—") + '</td></tr>';
+  });
+  mh += '<tr class="total"><td>Range</td>' + cl.map(a => '<td>' + n2(a.tons) + '</td>').join("") +
+    '<td>' + n2(mTot) + '</td><td>' + (mCounty ? n2(mCounty) : "—") + '</td>' +
+    cl.map(a => '<td style="color:' + esc(a.cat.color) + '">' + (mCounty ? pct(mCat[a.cat.id] || 0, mCounty) : "—") + '</td>').join("") +
+    '<td>' + (mCounty ? n2(mCounty - cLogged) : "—") + '</td><td>' + (mCounty ? pct(cLogged, mCounty) : "—") + '</td></tr></tbody>';
+  $("#rMonthTable").innerHTML = mh;
+}
+$("#rFrom").onclick = () => openCal($("#rFrom"), VIEW.from, async v => {
+  VIEW.from = v; if (VIEW.to < v) VIEW.to = v; VIEW.preset = "custom";
+  await ensureRange(); renderSplit();
+}, { rangeFrom: VIEW.from, rangeTo: VIEW.to });
+$("#rTo").onclick = () => openCal($("#rTo"), VIEW.to, async v => {
+  VIEW.to = v; if (VIEW.from > v) VIEW.from = v; VIEW.preset = "custom";
+  await ensureRange(); renderSplit();
+}, { rangeFrom: VIEW.from, rangeTo: VIEW.to });
+$("#rGo").onclick = async () => { await ensureRange(true); renderSplit(); toast("Range refreshed"); };
+$("#rCsv").onclick = () => {
+  const d = splitData();
+  const rows = [["Range", VIEW.from + " to " + VIEW.to], [], ["Category", "Unit", "Description", "Loads", "Days", "Net tons", "Avg tons/load", "Pct of category", "Pct of fleet"]];
+  d.list.forEach(a => {
+    Object.values(a.trucks).forEach(x => {
+      const t = x.truck || {};
+      rows.push([a.cat.name, t.unit || "(deleted)", t.label || "", x.loads, Object.keys(x.days).length, n2(x.tons), n2(x.tons / x.loads), a.tons ? n1(x.tons / a.tons * 100) : "0", d.tons ? n1(x.tons / d.tons * 100) : "0"]);
+    });
+    rows.push([a.cat.name, "SUBTOTAL", "", a.loads, Object.keys(a.days).length, n2(a.tons), a.loads ? n2(a.tons / a.loads) : "", "100", d.tons ? n1(a.tons / d.tons * 100) : "0"]);
+  });
+  rows.push(["TOTAL", "", "", d.loads, d.days, n2(d.tons), d.loads ? n2(d.tons / d.loads) : "", "", "100"]);
+  const rl2 = rangeLoads(VIEW.from, VIEW.to), fT2 = facTotals(rl2);
+  const fL2 = facs().concat([{ id: "", name: "Unrecorded" }]).filter(f => fT2[f.id]);
+  if (fL2.length) {
+    rows.push([]);
+    rows.push(["Facility", "Net tons", "Pct of range"]);
+    fL2.forEach(f => rows.push([f.name, n2(fT2[f.id]), d.tons ? n1(fT2[f.id] / d.tons * 100) + "%" : "0%"]));
+    rows.push([]);
+    rows.push(["Category x facility (net tons)"]);
+    rows.push(["Category"].concat(fL2.map(f => f.name)));
+    cats().forEach(c => {
+      const sub = rl2.filter(l => { const t = DB.trucks[l.truckId]; return t && t.catId === c.id; });
+      const ft = facTotals(sub);
+      rows.push([c.name].concat(fL2.map(f => n2(ft[f.id] || 0))));
+    });
+  }
+  const whole = monthsBetween(VIEW.from, VIEW.to).filter(m => (m + "-01") >= VIEW.from && monthEnd(m) <= VIEW.to && countyTons(m) > 0);
+  if (whole.length) {
+    const cl = cats();
+    rows.push([]);
+    rows.push(["Against county delivered (whole months only)"]);
+    rows.push(["Month", "County tons", "Logged tons"].concat(cl.map(c => c.name + " tons")).concat(cl.map(c => c.name + " pct of county")).concat(["Not in log", "Capture pct"]));
+    let sc = 0, sl = 0; const sk = {};
+    whole.forEach(m => {
+      const ls = monthLoads(m), per = catTotals(ls);
+      const tot = ls.reduce((s, l) => s + (Number(l.tons) || 0), 0), cty = countyTons(m);
+      sc += cty; sl += tot; cl.forEach(c => sk[c.id] = (sk[c.id] || 0) + (per[c.id] || 0));
+      rows.push([m, n2(cty), n2(tot)].concat(cl.map(c => n2(per[c.id] || 0))).concat(cl.map(c => n1((per[c.id] || 0) / cty * 100) + "%")).concat([n2(cty - tot), n1(tot / cty * 100) + "%"]));
+    });
+    rows.push(["TOTAL", n2(sc), n2(sl)].concat(cl.map(c => n2(sk[c.id] || 0))).concat(cl.map(c => n1((sk[c.id] || 0) / sc * 100) + "%")).concat([n2(sc - sl), n1(sl / sc * 100) + "%"]));
+  }
+  dl(new Blob([toCSV(rows)], { type: "text/csv" }), "tonnage-split-" + VIEW.from + "_to_" + VIEW.to + ".csv");
+};
+
+/* ============================================================
+   MONTH
+   ============================================================ */
+function weekdaysIn(m, capToday) {
+  const p = m.split("-").map(Number), end = new Date(p[0], p[1], 0).getDate(), today = isoToday();
+  let days = [];
+  for (let i = 1; i <= end; i++) {
+    const d = new Date(p[0], p[1] - 1, i), w = d.getDay();
+    if (w >= 1 && w <= 5) { const iso = toISO(d); if (capToday && iso > today) continue; days.push(iso); }
+  }
+  return { count: days.length, days: days };
+}
+function summarize(m) {
+  const loads = monthLoads(m), byTruck = {};
+  loads.forEach(l => {
+    const b = byTruck[l.truckId] || (byTruck[l.truckId] = { tons: 0, loads: 0, days: {} });
+    b.tons += Number(l.tons) || 0; b.loads++; b.days[l.date] = 1;
+  });
+  const wd = weekdaysIn(m, true), groups = [], seen = {};
+  cats().forEach(c => {
+    const rows = trucks(false).filter(t => t.catId === c.id && (t.active !== false || byTruck[t.id])).map(t => {
+      seen[t.id] = 1;
+      const b = byTruck[t.id] || { tons: 0, loads: 0, days: {} };
+      return { truck: t, tons: b.tons, loads: b.loads, days: Object.keys(b.days).length, missed: t.active === false ? [] : wd.days.filter(x => !b.days[x]) };
+    });
+    if (rows.length) groups.push({ cat: c, rows: rows, tons: rows.reduce((s, r) => s + r.tons, 0), loads: rows.reduce((s, r) => s + r.loads, 0) });
+  });
+  const orphan = trucks(false).filter(t => !seen[t.id]);
+  if (orphan.length) {
+    const rows = orphan.map(t => { const b = byTruck[t.id] || { tons: 0, loads: 0, days: {} }; return { truck: t, tons: b.tons, loads: b.loads, days: Object.keys(b.days).length, missed: [] }; });
+    groups.push({ cat: { id: "", name: "Unassigned", color: "#546566" }, rows: rows, tons: rows.reduce((s, r) => s + r.tons, 0), loads: rows.reduce((s, r) => s + r.loads, 0) });
+  }
+  const totalTons = loads.reduce((s, l) => s + (Number(l.tons) || 0), 0);
+  return { groups: groups, totalTons: totalTons, totalLoads: loads.length,
+    opDays: Object.keys(loads.reduce((a, l) => (a[l.date] = 1, a), {})).length, weekdays: wd.count };
+}
+function renderMonth() {
+  const m = VIEW.month;
+  $("#mPickTxt").textContent = monthLabel(m);
+  const s = summarize(m);
+  $("#mStats").innerHTML =
+    stat("Total", n2(s.totalTons), "tons") + stat("Loads", s.totalLoads) +
+    stat("Avg / load", s.totalLoads ? n2(s.totalTons / s.totalLoads) : "—", "t") +
+    stat("Days run", s.opDays + " / " + s.weekdays) +
+    stat("Avg / day", s.opDays ? n2(s.totalTons / s.opDays) : "—", "t");
+
+  const max = Math.max.apply(null, [1].concat(s.groups.map(g => Math.max.apply(null, [0].concat(g.rows.map(r => r.tons))))));
+  let h = '<thead><tr><th>Unit</th><th>Loads</th><th>Days</th><th>Avg/load</th><th>Tons</th><th>% fleet</th><th class="barcell"></th></tr></thead><tbody>';
+  s.groups.forEach(g => {
+    h += '<tr class="group"><td colspan="4"><span class="tag" style="border-color:' + esc(g.cat.color) + '"><i class="swatch" style="background:' + esc(g.cat.color) + '"></i>' + esc(g.cat.name) + '</span></td>' +
+      '<td>' + n2(g.tons) + '</td><td style="color:' + esc(g.cat.color) + '">' + pct(g.tons, s.totalTons) + '</td><td></td></tr>';
+    g.rows.forEach(r => {
+      h += '<tr><td>' + esc(r.truck.unit) + (r.truck.label ? ' <span class="muted" style="font-size:11px">' + esc(r.truck.label) + '</span>' : "") + (r.truck.active === false ? ' <span class="muted" style="font-size:10px">[inactive]</span>' : "") + '</td>' +
+        '<td>' + (r.loads || "—") + '</td><td>' + (r.days || "—") + '</td><td>' + (r.loads ? n2(r.tons / r.loads) : "—") + '</td>' +
+        '<td>' + (r.tons ? n2(r.tons) : "—") + '</td><td>' + pct(r.tons, s.totalTons) + '</td>' +
+        '<td class="barcell"><div><span class="bar" style="width:' + (r.tons / max * 100) + '%;background:' + esc(g.cat.color) + '"></span></div></td></tr>';
+    });
+  });
+  h += '<tr class="total"><td>Fleet total</td><td>' + s.totalLoads + '</td><td>' + s.opDays + '</td><td>' + (s.totalLoads ? n2(s.totalTons / s.totalLoads) : "—") + '</td><td>' + n2(s.totalTons) + '</td><td>100.0%</td><td></td></tr></tbody>';
+  $("#mTable").innerHTML = s.groups.length ? h : '<tbody><tr><td class="empty">No trucks configured yet.</td></tr></tbody>';
+
+  const gaps = [];
+  s.groups.forEach(g => g.rows.forEach(r => { if (r.missed.length) gaps.push({ t: r.truck, c: g.cat, days: r.missed }); }));
+  $("#mGaps").innerHTML = gaps.length
+    ? '<div class="list">' + gaps.map(x => '<div class="item"><span class="tag"><i class="swatch" style="background:' + esc(x.c.color) + '"></i>' + esc(x.t.unit) + '</span>' +
+      '<span class="grow muted" style="font-size:11px">' + x.days.map(dd => dd.slice(8) + " " + DOW[parseISO(dd).getDay()]).join(", ") + '</span>' +
+      '<span style="color:var(--warn)">' + x.days.length + ' missed</span></div>').join("") + '</div>'
+    : '<div class="empty">Every active truck has a load on every weekday so far this month.</div>';
+
+  // county reconciliation
+  const rec = countyRec(m);
+  $("#cMonthLbl").textContent = monthLabel(m);
+  $("#cTons").value = rec ? rec.tons : "";
+  $("#cNote").value = rec ? (rec.note || "") : "";
+  $("#cMeta").textContent = rec
+    ? "Saved " + new Date(rec.ts).toLocaleDateString() + (rec.note ? " · " + rec.note : "")
+    : "Nothing recorded for " + monthLabel(m) + " yet.";
+  const ct = {};
+  s.groups.forEach(g => ct[g.cat.id] = g.tons);
+  $("#cRecon").innerHTML = reconHTML(countyTons(m), ct, s.totalTons, monthLabel(m));
+}
+$("#cSave").onclick = () => {
+  const v = parseFloat($("#cTons").value);
+  if (!isFinite(v) || v <= 0) return toast("Enter the tons the county reported", true);
+  saveCounty(VIEW.month, v, $("#cNote").value.trim());
+  renderMonth(); renderSplit(); toast("County total saved for " + monthLabel(VIEW.month));
+};
+$("#cClear").onclick = () => {
+  if (!countyRec(VIEW.month)) return;
+  if (!confirm("Remove the county figure for " + monthLabel(VIEW.month) + "?")) return;
+  saveCounty(VIEW.month, 0); renderMonth(); renderSplit(); toast("County figure removed");
+};
+$("#mPick").onclick = () => openCal($("#mPick"), VIEW.month, v => { VIEW.month = v; ensureMonth(v).then(renderMonth); }, { mode: "month" });
+$("#mPrev").onclick = () => { VIEW.month = shiftMonth(VIEW.month, -1); ensureMonth(VIEW.month).then(renderMonth); };
+$("#mNext").onclick = () => { VIEW.month = shiftMonth(VIEW.month, 1); ensureMonth(VIEW.month).then(renderMonth); };
+$("#mPull").onclick = async () => { await ensureMonth(VIEW.month, true); renderMonth(); toast("Month refreshed"); };
+
+/* ============================================================
+   TREND
+   ============================================================ */
+function renderTrend() {
+  const span = Number($("#tSpan").value), months = [];
+  for (let i = span - 1; i >= 0; i--) months.push(shiftMonth(isoToday().slice(0, 7), -i));
+  const cl = cats().concat([{ id: "", name: "Unassigned", color: "#546566" }]);
+  const grid = {};
+  months.forEach(m => {
+    grid[m] = {};
+    monthLoads(m).forEach(l => { const t = DB.trucks[l.truckId]; const id = t && DB.cats[t.catId] ? t.catId : ""; grid[m][id] = (grid[m][id] || 0) + (Number(l.tons) || 0); });
+  });
+  const used = cl.filter(c => months.some(m => grid[m][c.id]));
+  const totals = months.map(m => used.reduce((s, c) => s + (grid[m][c.id] || 0), 0));
+  const max = Math.max.apply(null, [1].concat(totals));
+  const W = 1000, H = 230, padL = 46, padB = 26, padT = 10, bw = (W - padL - 8) / Math.max(1, months.length);
+  let svg = "";
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (H - padT - padB) * (i / 4);
+    svg += '<line x1="' + padL + '" y1="' + y + '" x2="' + W + '" y2="' + y + '" stroke="#1e2a2c"/>' +
+      '<text x="' + (padL - 6) + '" y="' + (y + 4) + '" fill="#546566" font-size="11" text-anchor="end" font-family="monospace">' + Math.round(max * (1 - i / 4)) + '</text>';
+  }
+  months.forEach((m, i) => {
+    let acc = 0; const x = padL + i * bw + bw * 0.16, w = bw * 0.68;
+    used.forEach(c => {
+      const v = grid[m][c.id] || 0; if (!v) return;
+      const hh = (H - padT - padB) * (v / max), y = padT + (H - padT - padB) * (1 - (acc + v) / max);
+      svg += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + Math.max(hh, .5) + '" fill="' + esc(c.color) + '" opacity=".88"><title>' + esc(c.name) + ' · ' + monthLabel(m) + ' · ' + n2(v) + ' t</title></rect>';
+      acc += v;
+    });
+    if (months.length <= 14 || i % 2 === 0)
+      svg += '<text x="' + (x + w / 2) + '" y="' + (H - 8) + '" fill="#546566" font-size="10" text-anchor="middle" font-family="monospace">' + m.slice(5) + "/" + m.slice(2, 4) + '</text>';
+  });
+  const chart = $("#tChart"); chart.setAttribute("viewBox", "0 0 " + W + " " + H); chart.innerHTML = svg;
+  $("#tLegend").innerHTML = used.map(c => '<span><i class="swatch" style="background:' + esc(c.color) + '"></i>' + esc(c.name) + '</span>').join("") ||
+    '<span class="muted">No data in range — press “Load range” to pull months from the cloud.</span>';
+
+  let h = '<thead><tr><th>Month</th>' + used.map(c => '<th>' + esc(c.name) + '</th>').join("") + used.map(c => '<th>' + esc(c.name) + ' %</th>').join("") + '<th>Total</th></tr></thead><tbody>';
+  months.forEach((m, i) => {
+    h += '<tr><td>' + monthLabel(m) + '</td>' + used.map(c => '<td>' + (grid[m][c.id] ? n2(grid[m][c.id]) : "—") + '</td>').join("") +
+      used.map(c => '<td style="color:' + esc(c.color) + '">' + (totals[i] ? pct(grid[m][c.id] || 0, totals[i]) : "—") + '</td>').join("") +
+      '<td>' + (totals[i] ? n2(totals[i]) : "—") + '</td></tr>';
+  });
+  const gt = totals.reduce((a, b) => a + b, 0);
+  h += '<tr class="total"><td>Total</td>' + used.map(c => '<td>' + n2(months.reduce((s, m) => s + (grid[m][c.id] || 0), 0)) + '</td>').join("") +
+    used.map(c => '<td style="color:' + esc(c.color) + '">' + pct(months.reduce((s, m) => s + (grid[m][c.id] || 0), 0), gt) + '</td>').join("") + '<td>' + n2(gt) + '</td></tr></tbody>';
+  $("#tTable").innerHTML = h;
+
+  const tg = {};
+  months.forEach(m => monthLoads(m).forEach(l => { (tg[l.truckId] = tg[l.truckId] || {})[m] = (tg[l.truckId][m] || 0) + (Number(l.tons) || 0); }));
+  let th = '<thead><tr><th>Unit</th>' + months.map(m => '<th>' + m.slice(5) + "/" + m.slice(2, 4) + '</th>').join("") + '<th>Total</th></tr></thead><tbody>';
+  let lastC = null;
+  trucks(false).forEach(t => {
+    const c = catOf(t);
+    if (c.id !== lastC) { lastC = c.id; th += '<tr class="group"><td colspan="' + (months.length + 2) + '"><span class="tag"><i class="swatch" style="background:' + esc(c.color) + '"></i>' + esc(c.name) + '</span></td></tr>'; }
+    const row = tg[t.id] || {}, tot = months.reduce((s, m) => s + (row[m] || 0), 0);
+    th += '<tr><td>' + esc(t.unit) + '</td>' + months.map(m => '<td>' + (row[m] ? n1(row[m]) : "—") + '</td>').join("") + '<td>' + (tot ? n2(tot) : "—") + '</td></tr>';
+  });
+  th += '</tbody>';
+  $("#tTruck").innerHTML = trucks(false).length ? th : '<tbody><tr><td class="empty">No trucks configured.</td></tr></tbody>';
+}
+$("#tSpan").onchange = renderTrend;
+$("#tLoad").onclick = async () => {
+  const span = Number($("#tSpan").value);
+  if (!syncOn()) { toast("Cloud sync is off — showing local data", true); return renderTrend(); }
+  toast("Pulling " + span + " months…");
+  for (let i = span - 1; i >= 0; i--) { try { await ensureMonth(shiftMonth(isoToday().slice(0, 7), -i), true); } catch (e) { } }
+  renderTrend(); toast("Range loaded");
+};
+
+/* ============================================================
+   FLEET
+   ============================================================ */
+function renderFleet() {
+  const cs = cats();
+  $("#catList").innerHTML = cs.map(c =>
+    '<div class="item"><input type="color" value="' + esc(c.color) + '" data-cc="' + c.id + '" style="width:36px;padding:2px">' +
+    '<input class="grow" value="' + esc(c.name) + '" data-cn="' + c.id + '">' +
+    '<span class="muted" style="font-size:11px">' + trucks(false).filter(t => t.catId === c.id).length + ' trucks</span>' +
+    (cs.length > 2 ? '<button class="btn sm danger" data-cx="' + c.id + '">Delete</button>' : "") + '</div>').join("");
+
+  $("#newTruckCat").innerHTML = cs.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join("");
+
+  const ts = trucks(false);
+  $("#truckList").innerHTML = ts.length ? ts.map(t =>
+    '<div class="item"><input value="' + esc(t.unit) + '" data-tu="' + t.id + '" style="width:90px">' +
+    '<input class="grow" value="' + esc(t.label || "") + '" placeholder="description" data-tl="' + t.id + '">' +
+    '<select data-tc="' + t.id + '">' + cs.map(c => '<option value="' + c.id + '"' + (c.id === t.catId ? " selected" : "") + '>' + esc(c.name) + '</option>').join("") + '</select>' +
+    '<label class="f" style="flex-direction:row;align-items:center;gap:5px;font-size:11px;text-transform:none;letter-spacing:0;color:' + (t.active === false ? "var(--dim2)" : "var(--tx)") + '"><input type="checkbox" data-ta="' + t.id + '"' + (t.active === false ? "" : " checked") + '> active</label>' +
+    '<button class="btn sm danger" data-tx="' + t.id + '">Delete</button></div>').join("")
+    : '<div class="empty">No trucks yet. Add your Roto-Pacs and rear loaders below.</div>';
+
+  const fs = facs();
+  $("#facList").innerHTML = fs.length ? fs.map(f =>
+    '<div class="item"><input class="grow" value="' + esc(f.name) + '" data-fn="' + f.id + '">' +
+    '<input value="' + esc(f.short || "") + '" data-fs="' + f.id + '" style="width:120px" placeholder="label">' +
+    (fs.length > 1 ? '<button class="btn sm danger" data-fx="' + f.id + '">Delete</button>' : "") + '</div>').join("")
+    : '<div class="empty">No facilities yet. Add at least one so loads can be tagged.</div>';
+
+  $$("[data-cn]").forEach(i => i.onchange = () => { const c = DB.cats[i.dataset.cn]; c.name = i.value.trim() || c.name; saveCat(c); renderAll(); });
+  $$("[data-cc]").forEach(i => i.onchange = () => { const c = DB.cats[i.dataset.cc]; c.color = i.value; saveCat(c); renderAll(); });
+  $$("[data-cx]").forEach(b => b.onclick = () => {
+    const id = b.dataset.cx, used = trucks(false).filter(t => t.catId === id).length;
+    if (used && !confirm(used + " truck(s) use this category. They become Unassigned. Continue?")) return;
+    delete DB.cats[id]; saveLocal(); push("cats/" + id, null); renderAll();
+  });
+  $$("[data-tu]").forEach(i => i.onchange = () => { const t = DB.trucks[i.dataset.tu]; t.unit = i.value.trim() || t.unit; saveTruck(t); renderFleet(); });
+  $$("[data-tl]").forEach(i => i.onchange = () => { const t = DB.trucks[i.dataset.tl]; t.label = i.value.trim(); saveTruck(t); });
+  $$("[data-tc]").forEach(i => i.onchange = () => { const t = DB.trucks[i.dataset.tc]; t.catId = i.value; saveTruck(t); renderFleet(); });
+  $$("[data-ta]").forEach(i => i.onchange = () => { const t = DB.trucks[i.dataset.ta]; t.active = i.checked; saveTruck(t); renderFleet(); });
+  $$("[data-tx]").forEach(b => b.onclick = () => {
+    if (!confirm("Delete this truck? Past loads stay in the data but lose their label.")) return;
+    const id = b.dataset.tx; delete DB.trucks[id]; saveLocal(); push("trucks/" + id, null); renderFleet();
+  });
+  $$("[data-fn]").forEach(i => i.onchange = () => { const f = DB.facs[i.dataset.fn]; f.name = i.value.trim() || f.name; saveFac(f); renderAll(); });
+  $$("[data-fs]").forEach(i => i.onchange = () => { const f = DB.facs[i.dataset.fs]; f.short = i.value.trim() || f.name; saveFac(f); renderAll(); });
+  $$("[data-fx]").forEach(b => b.onclick = () => {
+    const id = b.dataset.fx;
+    if (!confirm("Delete this facility? Loads already tagged to it keep the name in history.")) return;
+    delete DB.facs[id]; saveLocal(); push("facs/" + id, null); bump("fleet"); renderAll();
+  });
+}
+$("#addCat").onclick = () => {
+  const name = $("#newCat").value.trim(); if (!name) return toast("Name the category first", true);
+  saveCat({ id: uid(), name: name, color: $("#newCatColor").value, order: cats().length });
+  $("#newCat").value = ""; renderAll();
+};
+$("#addTruck").onclick = () => {
+  const unit = $("#newUnit").value.trim(); if (!unit) return toast("Enter a unit number", true);
+  saveTruck({ id: uid(), unit: unit, label: $("#newLabel").value.trim(), catId: $("#newTruckCat").value, active: true });
+  $("#newUnit").value = ""; $("#newLabel").value = ""; renderFleet(); renderDay();
+};
+$("#addFac").onclick = () => {
+  const name = $("#newFacName").value.trim(); if (!name) return toast("Name the facility first", true);
+  const short = $("#newFacShort").value.trim() || name.split(/\s+/)[0];
+  saveFac({ id: uid(), name: name, short: short, order: facs().length });
+  $("#newFacName").value = ""; $("#newFacShort").value = ""; renderAll();
+};
+
+/* ============================================================
+   DATA
+   ============================================================ */
+function renderCfg() {
+  $("#cfgUrl").value = CFG.url; $("#cfgAuth").value = CFG.auth; $("#cfgRoot").value = CFG.root;
+  $("#cfgSync").checked = !!CFG.sync; $("#cfgUnit").value = CFG.unit; $("#cfgFleet").value = CFG.fleet;
+  $("#cfgDevice").value = CFG.device || "";
+  $("#fleetName").textContent = CFG.fleet;
+  $("#storeNote").textContent = LS.ok()
+    ? "Local cache active. Data also lives in this browser so the dump sheet works with no signal."
+    : "This browser blocked local storage — data is held in memory for this session only. Turn on cloud sync.";
+  renderPend(); renderVersion(); paintStatus(); renderRules();
+  if (!CFG.url) {
+    $("#setupBody").style.display = "block";
+    $("#setupToggle").textContent = "Hide steps";
+  }
+}
+["cfgUrl", "cfgAuth", "cfgRoot", "cfgFleet", "cfgDevice"].forEach(id => $("#" + id).onchange = e => {
+  CFG[id.slice(3).toLowerCase()] = e.target.value.trim(); saveLocal(); renderCfg();
+  if (id === "cfgDevice") beat();
+  if (id === "cfgUrl" || id === "cfgAuth" || id === "cfgRoot") { if (syncOn()) { startStream(); beat(); } else stopStream(); }
+});
+$("#cfgSync").onchange = e => {
+  CFG.sync = e.target.checked; saveLocal(); renderCfg();
+  if (CFG.sync) { flush(); startStream(); beat(); pullPresence(); } else stopStream();
+};
+$("#cfgUnit").onchange = e => { CFG.unit = e.target.value; saveLocal(); renderDay(); };
+$("#btnTest").onclick = async () => {
+  if (!CFG.url) return toast("Add the database URL first", true);
+  try { await fetch(fbUrl("__ping")); toast("Database reachable"); }
+  catch (e) { toast("Could not reach database: " + e.message, true); }
+};
+$("#btnPush").onclick = async () => {
+  if (!syncOn()) return toast("Turn on sync first", true);
+  try {
+    await fbSend("PUT", "cats", DB.cats); await fbSend("PUT", "trucks", DB.trucks); await fbSend("PUT", "facs", DB.facs || {});
+    await fbSend("PUT", "county", DB.county || {});
+    for (const m in DB.loads) await fbSend("PUT", "loads/" + m, DB.loads[m]);
+    setSync("ok"); toast("Everything pushed up");
+  } catch (e) { setSync("err", e.message); toast("Push failed: " + e.message, true); }
+};
+$("#btnPull").onclick = async () => {
+  if (!syncOn()) return toast("Turn on sync first", true);
+  try {
+    const all = await fbGet("");
+    if (!all) return toast("Nothing stored in the cloud yet", true);
+    DB.cats = all.cats || DB.cats; DB.trucks = all.trucks || {}; DB.facs = all.facs || DB.facs; DB.loads = all.loads || {};
+    DB.county = all.county || {};
+    seedCats(); saveLocal(); renderAll(); toast("Pulled everything down");
+  } catch (e) { toast("Pull failed: " + e.message, true); }
+};
+$("#btnBackup").onclick = () => dl(new Blob([JSON.stringify({ cfg: { fleet: CFG.fleet }, db: DB }, null, 2)], { type: "application/json" }), "tonnage-backup-" + isoToday() + ".json");
+$("#btnWipe").onclick = () => {
+  if (!confirm("Erase all local trucks and loads from this browser? Cloud data is untouched.")) return;
+  DB = { cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {} }; PENDING = [];
+  LS.set("tl.seedTrucks", false); LS.set("tl.seedFacs", false);
+  seedCats(); saveLocal(); renderAll(); toast("Local data erased");
+};
+$("#btnSample").onclick = () => {
+  SEED_TRUCKS.forEach(t => { if (!DB.trucks[t.id]) saveTruck(Object.assign({}, t)); });
+  SEED_FACS.forEach(f => { if (!DB.facs[f.id]) saveFac(Object.assign({}, f)); });
+  renderAll(); toast("Default fleet and facilities restored");
+};
+
+function dl(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function csvCell(v) { const s = String(v == null ? "" : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+function toCSV(rows) { return rows.map(r => r.map(csvCell).join(",")).join("\r\n"); }
+
+$("#mCsvSum").onclick = () => {
+  const s = summarize(VIEW.month);
+  const rows = [["Month", "Category", "Unit", "Description", "Loads", "Days run", "Net tons", "Avg tons per load", "Pct of fleet"]];
+  s.groups.forEach(g => {
+    g.rows.forEach(r => rows.push([VIEW.month, g.cat.name, r.truck.unit, r.truck.label || "", r.loads, r.days, n2(r.tons), r.loads ? n2(r.tons / r.loads) : "", s.totalTons ? n1(r.tons / s.totalTons * 100) : "0"]));
+    rows.push([VIEW.month, g.cat.name, "SUBTOTAL", "", g.loads, "", n2(g.tons), "", s.totalTons ? n1(g.tons / s.totalTons * 100) : "0"]);
+  });
+  rows.push([VIEW.month, "TOTAL", "", "", s.totalLoads, s.opDays, n2(s.totalTons), s.totalLoads ? n2(s.totalTons / s.totalLoads) : "", "100"]);
+  const fT = facTotals(monthLoads(VIEW.month));
+  const fList = facs().concat([{ id: "", name: "Unrecorded" }]).filter(f => fT[f.id]);
+  if (fList.length) {
+    rows.push([]);
+    rows.push(["Facility", "Net tons", "Pct of month"]);
+    fList.forEach(f => rows.push([f.name, n2(fT[f.id]), s.totalTons ? n1(fT[f.id] / s.totalTons * 100) + "%" : "0%"]));
+  }
+  const cty = countyTons(VIEW.month);
+  if (cty) {
+    rows.push([]);
+    rows.push(["County delivered total", n2(cty), "tons", (countyRec(VIEW.month).note || "")]);
+    rows.push(["Logged by truck", n2(s.totalTons), "tons"]);
+    rows.push(["Variance (logged - county)", n2(s.totalTons - cty), "tons", n1((s.totalTons - cty) / cty * 100) + "%"]);
+    rows.push([]);
+    rows.push(["Category", "Net tons", "Pct of county"]);
+    s.groups.forEach(g => rows.push([g.cat.name, n2(g.tons), n1(g.tons / cty * 100) + "%"]));
+    if (cty > s.totalTons) rows.push(["Not in the log", n2(cty - s.totalTons), n1((cty - s.totalTons) / cty * 100) + "%"]);
+  }
+  dl(new Blob([toCSV(rows)], { type: "text/csv" }), "tonnage-summary-" + VIEW.month + ".csv");
+};
+$("#mCsvRaw").onclick = () => {
+  const rows = [["Date", "Unit", "Category", "Facility", "Net tons", "Ticket", "Material", "Entered by"]];
+  monthLoads(VIEW.month).sort((a, b) => a.date.localeCompare(b.date)).forEach(l => {
+    const t = DB.trucks[l.truckId];
+    rows.push([l.date, t ? t.unit : "(deleted)", catOf(t).name, facOf(l).name, n2(l.tons), l.ticket || "", l.material || "", l.by || ""]);
+  });
+  dl(new Blob([toCSV(rows)], { type: "text/csv" }), "tonnage-loads-" + VIEW.month + ".csv");
+};
+
+function parseCSV(text) {
+  const out = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n") { row.push(cell); out.push(row); row = []; cell = ""; }
+    else if (c !== "\r") cell += c;
+  }
+  if (cell.length || row.length) { row.push(cell); out.push(row); }
+  return out.filter(r => r.some(c => c.trim() !== ""));
+}
+function normDate(s) {
+  s = String(s).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return m[1] + "-" + m[2].padStart(2, "0") + "-" + m[3].padStart(2, "0");
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (m) { let y = m[3]; if (y.length === 2) y = "20" + y; return y + "-" + m[1].padStart(2, "0") + "-" + m[2].padStart(2, "0"); }
+  return null;
+}
+$("#btnImport").onclick = () => {
+  const raw = $("#csvIn").value.trim();
+  if (!raw) return toast("Paste some CSV first", true);
+  const rows = parseCSV(raw);
+  if (rows.length < 2) return toast("Need a header row plus at least one ticket", true);
+  const head = rows[0].map(h => h.trim().toLowerCase());
+  const col = names => { for (const nm of names) { const i = head.indexOf(nm); if (i >= 0) return i; } return -1; };
+  const cDate = col(["date", "dump date", "service date"]), cTruck = col(["truck", "unit", "unit #", "vehicle", "truck #"]);
+  const cTons = col(["tons", "net tons", "net ton", "tonnage"]), cLbs = col(["lbs", "pounds", "net lbs", "net weight", "weight"]);
+  const cTk = col(["ticket", "ticket #", "ticket no"]), cSite = col(["facility", "site", "landfill", "location"]), cMat = col(["material", "waste type", "type"]);
+  const byFac = {}; facs().forEach(f => { byFac[f.name.toLowerCase()] = f.id; byFac[(f.short || "").toLowerCase()] = f.id; });
+  if (cDate < 0 || cTruck < 0 || (cTons < 0 && cLbs < 0)) return toast("Need date, truck and a weight column", true);
+  const byUnit = {}; trucks(false).forEach(t => byUnit[String(t.unit).trim().toLowerCase()] = t);
+  let added = 0; const unknown = {};
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i], date = normDate(r[cDate] || ""); if (!date) continue;
+    const t = byUnit[String(r[cTruck] || "").trim().toLowerCase()];
+    if (!t) { unknown[r[cTruck]] = 1; continue; }
+    let tons = cTons >= 0 ? parseFloat(String(r[cTons]).replace(/[^0-9.\-]/g, "")) : NaN;
+    if (!isFinite(tons) && cLbs >= 0) { const lb = parseFloat(String(r[cLbs]).replace(/[^0-9.\-]/g, "")); if (isFinite(lb)) tons = lb / 2000; }
+    if (!isFinite(tons) || tons <= 0) continue;
+    const sTxt = cSite >= 0 ? String(r[cSite] || "").trim() : "";
+    const fid = byFac[sTxt.toLowerCase()] || "";
+    saveLoad({ id: uid(), date: date, truckId: t.id, tons: Math.round(tons * 1000) / 1000,
+      ticket: cTk >= 0 ? String(r[cTk] || "").trim() : "", facId: fid, site: fid ? DB.facs[fid].name : sTxt,
+      material: cMat >= 0 ? String(r[cMat] || "").trim() : "", ts: Date.now(), by: deviceName() });
+    added++;
+  }
+  const un = Object.keys(unknown);
+  $("#importNote").innerHTML = added + " load(s) imported." + (un.length ? ' <span style="color:var(--warn)">Unmatched units: ' + esc(un.join(", ")) + ' — add them under Fleet and re-import.</span>' : "");
+  $("#csvIn").value = ""; renderAll();
+  toast(added + " loads imported" + (un.length ? " · " + un.length + " unit(s) unmatched" : ""));
+};
+
+/* ============================================================
+   Boot
+   ============================================================ */
+function seedCats() {
+  let changed = false;
+  SEED_CATS.forEach(c => { if (!DB.cats[c.id]) { DB.cats[c.id] = Object.assign({}, c); changed = true; } });
+  DB.facs = DB.facs || {};
+  if (!Object.keys(DB.facs).length && !LS.get("tl.seedFacs", false)) {
+    SEED_FACS.forEach(f => DB.facs[f.id] = Object.assign({}, f));
+    LS.set("tl.seedFacs", true); changed = true;
+  }
+  if (!Object.keys(DB.trucks).length && !LS.get("tl.seedTrucks", false)) {
+    SEED_TRUCKS.forEach(t => DB.trucks[t.id] = Object.assign({}, t));
+    LS.set("tl.seedTrucks", true); changed = true;
+  }
+  if (changed) saveLocal();
+  return changed;
+}
+/* push a freshly seeded fleet to the cloud so other devices inherit it */
+async function pushSeed() {
+  if (!syncOn()) return;
+  try {
+    await fbSend("PUT", "cats", DB.cats);
+    await fbSend("PUT", "trucks", DB.trucks);
+    await fbSend("PUT", "facs", DB.facs);
+    bump("fleet");
+  } catch (e) { }
+}
+async function ensureMonth(m, force) {
+  if (!syncOn()) return;
+  if (DB.loads[m] && !force) return;
+  try { const v = await fbGet("loads/" + m); DB.loads[m] = v || {}; saveLocal(); setSync("ok"); }
+  catch (e) { setSync("err", e.message); }
+}
+function renderAll() { renderDay(); renderSplit(); renderMonth(); renderFleet(); renderTrend(); renderCfg(); }
+
+(async function init() {
+  const adopted = adoptHash();
+  seedCats();
+  renderCfg();
+  if (syncOn()) {
+    try {
+      const meta = await fbGet("");
+      if (meta) {
+        DB.cats = Object.assign({}, DB.cats, meta.cats || {});
+        if (meta.trucks) { DB.trucks = meta.trucks; LS.set("tl.seedTrucks", true); }
+        if (meta.facs) { DB.facs = meta.facs; LS.set("tl.seedFacs", true); }
+        DB.county = meta.county || DB.county || {};
+        DB.loads = Object.assign({}, DB.loads, meta.loads || {});
+        PRESENCE = meta.presence || {};
+        if (meta.ctl) { LAST_CHANGE = meta.ctl; if (meta.ctl.build > BUILD) offerUpdate(meta.ctl.build); }
+        seedCats(); saveLocal();
+      }
+      setSync("ok");
+    } catch (e) { setSync("err", e.message); }
+    flush(); startStream(); beat();
+    if (!Object.keys(DB.trucks).length) seedCats();
+    const board = await fbGet("trucks").catch(() => null);
+    if (!board) await pushSeed(); else bump("open");
+  }
+  renderAll();
+  checkUpdate(false);
+  if (adopted) {
+    $$("nav button").forEach(b => { if (b.dataset.tab === "data") b.click(); });
+    toast("Connected to " + CFG.fleet + " — name this device below");
+    setTimeout(() => { const d = $("#cfgDevice"); if (d && !CFG.device) { d.focus(); } }, 400);
+  }
+})();
+window.addEventListener("beforeunload", () => { stopStream(); });
+</script>
+</body>
+</html>
