@@ -104,6 +104,25 @@ textarea{width:100%;min-height:110px;resize:vertical;line-height:1.5}
 .calfoot{display:flex;gap:6px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
 .calfoot button{flex:1}
 
+.sugwrap{margin-bottom:12px}
+.sugbar{display:flex;align-items:center;gap:9px;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:9px 12px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.sugbar:hover{border-color:var(--line2);color:var(--tx)}
+.sugbar.open{border-radius:4px 4px 0 0;border-bottom-color:transparent;color:var(--tx)}
+.sugico{color:var(--acc)}
+.sugbar .car{color:var(--dim2);font-size:10px}
+.sugcount{background:var(--acc-d);color:var(--acc);border-radius:99px;padding:1px 8px;font-size:10px;letter-spacing:.06em}
+.sugcount:empty{display:none}
+.sugpanel{display:none;background:var(--panel);border:1px solid var(--line);border-top:0;border-radius:0 0 4px 4px}
+.sugpanel.open{display:block}
+.sugitem{display:flex;gap:10px;padding:10px 12px;border-top:1px solid var(--line);align-items:flex-start}
+.sugitem.done{opacity:.45}
+.sugitem .txt{flex:1;min-width:0;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.sugitem.done .txt{text-decoration:line-through}
+.sugitem .who{font-size:10px;color:var(--dim2);letter-spacing:.06em;margin-top:4px}
+.sugchk{background:none;border:1px solid var(--line2);border-radius:3px;width:20px;height:20px;flex:none;color:var(--acc);font-size:12px;line-height:1;padding:0;margin-top:2px}
+.sugchk:hover{border-color:var(--acc)}
+.sugx{background:none;border:0;color:var(--dim2);padding:0 2px;line-height:1;font-size:15px}
+.sugx:hover{color:var(--bad)}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;background:var(--line)}
 .stat{background:var(--panel);padding:11px 12px}
 .stat .k{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2)}
@@ -204,6 +223,27 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
 </header>
 
 <main>
+
+<!-- ================= SUGGESTIONS ================= -->
+<div class="sugwrap">
+  <button class="sugbar" id="sugBar">
+    <span class="sugico">&#9998;</span>
+    <span>Suggestions &amp; notes</span>
+    <span class="sugcount" id="sugCount"></span>
+    <span class="spacer"></span>
+    <span class="car" id="sugCar">&#9662;</span>
+  </button>
+  <div class="sugpanel" id="sugPanel">
+    <div class="pad" style="padding-bottom:0">
+      <textarea id="sugText" rows="2" placeholder="Something broken, missing, or annoying? Type it here." style="min-height:60px"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn pri" id="sugAdd">Post it</button>
+        <span class="hint">Goes to everyone on this board, tagged with your device name.</span>
+      </div>
+    </div>
+    <div id="sugList"></div>
+  </div>
+</div>
 
 <!-- ================= DAY ENTRY ================= -->
 <section id="tab-day" class="on">
@@ -491,8 +531,8 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
           {root}/loads/{YYYY-MM}/{id}  {root}/ctl  {root}/presence/{dev}
    ============================================================ */
 
-const BUILD = /*BUILD*/ 5;
-const BUILD_NOTES = "Named fleet, facility toggle, setup guide";
+const BUILD = /*BUILD*/ 6;
+const BUILD_NOTES = "Suggestion box, honest connection test";
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -526,7 +566,7 @@ const LS = {
 };
 
 let CFG = Object.assign({ url: "", auth: "", root: "tonnage", sync: false, unit: "ton", fleet: "Steve's Sanitation", device: "", lastFac: "" }, LS.get("tl.cfg", {}));
-let DB = Object.assign({ cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {} }, LS.get("tl.db", {}));
+let DB = Object.assign({ cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {}, ideas: {} }, LS.get("tl.db", {}));
 let PENDING = LS.get("tl.pend", []);
 let DEVICE_ID = LS.get("tl.devid", "");
 if (!DEVICE_ID) { DEVICE_ID = Math.random().toString(36).slice(2, 10); LS.set("tl.devid", DEVICE_ID); }
@@ -689,6 +729,7 @@ async function onCtl(ev) {
   try {
     if (c.kind === "load" && c.month) await ensureMonth(c.month, true);
     else if (c.kind === "county") { const v = await fbGet("county"); DB.county = v || {}; saveLocal(); }
+    else if (c.kind === "ideas") { const v = await fbGet("ideas"); DB.ideas = v || {}; saveLocal(); }
     else if (c.kind === "fleet") {
       const a = await fbGet("cats"), b = await fbGet("trucks"), f = await fbGet("facs");
       if (a) DB.cats = a; if (b) DB.trucks = b; if (f) DB.facs = f;
@@ -963,6 +1004,49 @@ function drawCal() {
     (o.quick ? o.quick.map(q => '<button class="btn sm" data-jump="' + q.v + '">' + q.k + '</button>').join("") : "") + '</div>';
   el.innerHTML = h;
 }
+
+/* ============================================================
+   Suggestions
+   ============================================================ */
+function ideas() {
+  return Object.values(DB.ideas || {}).sort((a, b) => (a.done === b.done) ? (b.at || 0) - (a.at || 0) : (a.done ? 1 : -1));
+}
+function saveIdea(i) { DB.ideas = DB.ideas || {}; DB.ideas[i.id] = i; saveLocal(); push("ideas/" + i.id, i); bump("ideas"); }
+function renderSug() {
+  const list = ideas(), open = list.filter(i => !i.done);
+  $("#sugCount").textContent = open.length ? open.length + " open" : "";
+  $("#sugList").innerHTML = list.length ? list.map(i =>
+    '<div class="sugitem' + (i.done ? " done" : "") + '">' +
+    '<button class="sugchk" data-sdone="' + i.id + '" title="' + (i.done ? "Reopen" : "Mark done") + '">' + (i.done ? "&#10003;" : "") + '</button>' +
+    '<span class="txt">' + esc(i.text) +
+    '<div class="who">' + esc(i.by || "someone") + ' · ' + new Date(i.at || 0).toLocaleString() +
+    (i.done && i.doneBy ? ' · done by ' + esc(i.doneBy) : "") + '</div></span>' +
+    '<button class="sugx" data-sx="' + i.id + '" title="Delete">&times;</button></div>').join("")
+    : '<div class="empty">Nothing yet. First one to spot something wrong gets to complain about it.</div>';
+
+  $$("#sugList [data-sdone]").forEach(b => b.onclick = () => {
+    const i = DB.ideas[b.dataset.sdone]; if (!i) return;
+    i.done = !i.done; i.doneBy = i.done ? deviceName() : ""; i.doneAt = i.done ? Date.now() : 0;
+    saveIdea(i); renderSug();
+  });
+  $$("#sugList [data-sx]").forEach(b => b.onclick = () => {
+    if (!confirm("Delete this suggestion?")) return;
+    const id = b.dataset.sx; delete DB.ideas[id]; saveLocal(); push("ideas/" + id, null); bump("ideas"); renderSug();
+  });
+}
+$("#sugBar").onclick = () => {
+  const p = $("#sugPanel"), open = p.classList.toggle("open");
+  $("#sugBar").classList.toggle("open", open);
+  $("#sugCar").innerHTML = open ? "&#9652;" : "&#9662;";
+  if (open) $("#sugText").focus();
+};
+$("#sugAdd").onclick = () => {
+  const t = $("#sugText").value.trim();
+  if (!t) return toast("Type something first", true);
+  saveIdea({ id: uid(), text: t.slice(0, 1200), by: deviceName(), at: Date.now(), done: false });
+  $("#sugText").value = ""; renderSug(); toast("Posted");
+};
+$("#sugText").onkeydown = e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("#sugAdd").click(); };
 
 /* ============================================================
    Tabs
@@ -1582,14 +1666,21 @@ $("#cfgSync").onchange = e => {
 $("#cfgUnit").onchange = e => { CFG.unit = e.target.value; saveLocal(); renderDay(); };
 $("#btnTest").onclick = async () => {
   if (!CFG.url) return toast("Add the database URL first", true);
-  try { await fetch(fbUrl("__ping")); toast("Database reachable"); }
-  catch (e) { toast("Could not reach database: " + e.message, true); }
+  try {
+    const r = await fetch(fbUrl(""));
+    if (r.ok) { setSync("ok"); toast("Connected — the database answered and let us in"); }
+    else if (r.status === 401 || r.status === 403) {
+      setSync("err", "HTTP " + r.status);
+      toast("Reached it, but access was refused (HTTP " + r.status + ") — check Rules and root path", true);
+    } else { setSync("err", "HTTP " + r.status); toast("Database answered HTTP " + r.status, true); }
+  } catch (e) { setSync("err", "unreachable"); toast("Could not reach the database: " + e.message, true); }
 };
 $("#btnPush").onclick = async () => {
   if (!syncOn()) return toast("Turn on sync first", true);
   try {
     await fbSend("PUT", "cats", DB.cats); await fbSend("PUT", "trucks", DB.trucks); await fbSend("PUT", "facs", DB.facs || {});
     await fbSend("PUT", "county", DB.county || {});
+    await fbSend("PUT", "ideas", DB.ideas || {});
     for (const m in DB.loads) await fbSend("PUT", "loads/" + m, DB.loads[m]);
     setSync("ok"); toast("Everything pushed up");
   } catch (e) { setSync("err", e.message); toast("Push failed: " + e.message, true); }
@@ -1600,14 +1691,14 @@ $("#btnPull").onclick = async () => {
     const all = await fbGet("");
     if (!all) return toast("Nothing stored in the cloud yet", true);
     DB.cats = all.cats || DB.cats; DB.trucks = all.trucks || {}; DB.facs = all.facs || DB.facs; DB.loads = all.loads || {};
-    DB.county = all.county || {};
+    DB.county = all.county || {}; DB.ideas = all.ideas || {};
     seedCats(); saveLocal(); renderAll(); toast("Pulled everything down");
   } catch (e) { toast("Pull failed: " + e.message, true); }
 };
 $("#btnBackup").onclick = () => dl(new Blob([JSON.stringify({ cfg: { fleet: CFG.fleet }, db: DB }, null, 2)], { type: "application/json" }), "tonnage-backup-" + isoToday() + ".json");
 $("#btnWipe").onclick = () => {
   if (!confirm("Erase all local trucks and loads from this browser? Cloud data is untouched.")) return;
-  DB = { cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {} }; PENDING = [];
+  DB = { cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {}, ideas: {} }; PENDING = [];
   LS.set("tl.seedTrucks", false); LS.set("tl.seedFacs", false);
   seedCats(); saveLocal(); renderAll(); toast("Local data erased");
 };
@@ -1752,7 +1843,7 @@ async function ensureMonth(m, force) {
   try { const v = await fbGet("loads/" + m); DB.loads[m] = v || {}; saveLocal(); setSync("ok"); }
   catch (e) { setSync("err", e.message); }
 }
-function renderAll() { renderDay(); renderSplit(); renderMonth(); renderFleet(); renderTrend(); renderCfg(); }
+function renderAll() { renderDay(); renderSplit(); renderMonth(); renderFleet(); renderTrend(); renderCfg(); renderSug(); }
 
 (async function init() {
   const adopted = adoptHash();
@@ -1766,6 +1857,7 @@ function renderAll() { renderDay(); renderSplit(); renderMonth(); renderFleet();
         if (meta.trucks) { DB.trucks = meta.trucks; LS.set("tl.seedTrucks", true); }
         if (meta.facs) { DB.facs = meta.facs; LS.set("tl.seedFacs", true); }
         DB.county = meta.county || DB.county || {};
+        DB.ideas = meta.ideas || DB.ideas || {};
         DB.loads = Object.assign({}, DB.loads, meta.loads || {});
         PRESENCE = meta.presence || {};
         if (meta.ctl) { LAST_CHANGE = meta.ctl; if (meta.ctl.build > BUILD) offerUpdate(meta.ctl.build); }
