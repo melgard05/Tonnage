@@ -215,6 +215,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
   <nav>
     <button data-tab="day" class="on">Day Entry</button>
     <button data-tab="split">Split</button>
+    <button data-tab="report">Report</button>
     <button data-tab="month">Month</button>
     <button data-tab="trend">Trend</button>
     <button data-tab="fleet">Fleet</button>
@@ -311,6 +312,52 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
   <div class="card">
     <h2>Month by month in range</h2>
     <div class="wrap"><table id="rMonthTable"></table></div>
+  </div>
+</section>
+
+<!-- ================= REPORT ================= -->
+<section id="tab-report">
+  <div class="card">
+    <h2>Truck type &times; facility <span class="spacer"></span><span class="muted" id="repRange"></span></h2>
+    <div class="pad" style="display:flex;flex-direction:column;gap:10px">
+      <div class="row">
+        <span class="hint">From</span>
+        <button class="dbtn" id="repFrom"><span id="repFromTxt"></span><span class="car">&#9662;</span></button>
+        <span class="hint">to</span>
+        <button class="dbtn" id="repTo"><span id="repToTxt"></span><span class="car">&#9662;</span></button>
+        <button class="btn sm" id="repGo">Run</button>
+        <span class="spacer"></span>
+        <button class="btn sm" id="repCsv">Export CSV</button>
+      </div>
+      <div class="presets" id="repPresets"></div>
+    </div>
+    <div class="stats" id="repStats"></div>
+  </div>
+
+  <div class="card">
+    <h2>Tons by truck type</h2>
+    <div class="split">
+      <div class="splitbar" id="repCatBar"></div>
+      <div class="splitkey" id="repCatKey"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Tons by facility</h2>
+    <div class="split">
+      <div class="splitbar" id="repFacBar"></div>
+      <div class="splitkey" id="repFacKey"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Matrix <span class="spacer"></span><span class="muted" style="font-size:11px">every truck type against every facility</span></h2>
+    <div class="wrap"><table id="repMatrix"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Truck detail</h2>
+    <div class="wrap"><table id="repTrucks"></table></div>
   </div>
 </section>
 
@@ -531,8 +578,8 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
           {root}/loads/{YYYY-MM}/{id}  {root}/ctl  {root}/presence/{dev}
    ============================================================ */
 
-const BUILD = /*BUILD*/ 6;
-const BUILD_NOTES = "Suggestion box, honest connection test";
+const BUILD = /*BUILD*/ 7;
+const BUILD_NOTES = "Side Load category, truck-type by facility report";
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -545,7 +592,8 @@ const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","
 
 const SEED_CATS = [
   { id: "rotopac",  name: "Roto-Pac",  color: "#5fd3a4", order: 0 },
-  { id: "rearload", name: "Rear Load", color: "#6fa8dc", order: 1 }
+  { id: "rearload", name: "Rear Load", color: "#6fa8dc", order: 1 },
+  { id: "sideload", name: "Side Load", color: "#e0a458", order: 2 }
 ];
 const SEED_TRUCKS = [
   { id: "t_twisted",     unit: "Twisted Sister",  label: "", catId: "rotopac",  active: true },
@@ -582,7 +630,8 @@ function shiftDay(iso, k) { const d = parseISO(iso); d.setDate(d.getDate() + k);
 function monthsBetween(a, b) { const out = []; let m = a.slice(0, 7); const end = b.slice(0, 7); let guard = 0; while (m <= end && guard++ < 400) { out.push(m); m = shiftMonth(m, 1); } return out; }
 function saveLocal() { LS.set("tl.db", DB); LS.set("tl.cfg", CFG); LS.set("tl.pend", PENDING); }
 
-let VIEW = { day: isoToday(), month: isoToday().slice(0, 7), from: isoToday().slice(0, 7) + "-01", to: isoToday(), preset: "mtd" };
+let VIEW = { day: isoToday(), month: isoToday().slice(0, 7), from: isoToday().slice(0, 7) + "-01", to: isoToday(), preset: "mtd",
+  rFrom: isoToday().slice(0, 7) + "-01", rTo: isoToday(), rPreset: "mtd" };
 
 let toastT;
 function toast(msg, bad) {
@@ -1057,6 +1106,7 @@ $$("nav button").forEach(b => b.onclick = () => {
   $$("main section").forEach(s => s.classList.toggle("on", s.id === "tab-" + b.dataset.tab));
   if (b.dataset.tab === "month") renderMonth();
   if (b.dataset.tab === "split") renderSplit();
+  if (b.dataset.tab === "report") renderReport();
   if (b.dataset.tab === "fleet") renderFleet();
   if (b.dataset.tab === "trend") renderTrend();
 });
@@ -1402,6 +1452,164 @@ $("#rCsv").onclick = () => {
 };
 
 /* ============================================================
+   REPORT — truck type x facility
+   ============================================================ */
+const FACCOL = ["#e0a458", "#c98bdb", "#6ecbd0", "#8fce6b", "#d9c46a"];
+function facColor(i, id) { return id ? FACCOL[i % FACCOL.length] : "#26383a"; }
+
+function renderReport() {
+  $("#repFromTxt").textContent = longDate(VIEW.rFrom);
+  $("#repToTxt").textContent = longDate(VIEW.rTo);
+  $("#repPresets").innerHTML = PRESETS.map(p => '<button class="btn sm' + (VIEW.rPreset === p.k ? " on" : "") + '" data-rp="' + p.k + '">' + p.label + '</button>').join("") +
+    '<button class="btn sm' + (VIEW.rPreset === "custom" ? " on" : "") + '" data-rp="custom">Custom</button>';
+  $$("#repPresets [data-rp]").forEach(b => b.onclick = async () => {
+    const p = PRESETS.find(x => x.k === b.dataset.rp);
+    VIEW.rPreset = b.dataset.rp;
+    if (p) { const r = p.calc(); VIEW.rFrom = r[0]; VIEW.rTo = r[1]; }
+    await ensureReportRange(); renderReport();
+  });
+
+  const loads = rangeLoads(VIEW.rFrom, VIEW.rTo);
+  const tons = loads.reduce((s, l) => s + (Number(l.tons) || 0), 0);
+  const days = Object.keys(loads.reduce((a, l) => (a[l.date] = 1, a), {})).length;
+  const span = Math.round((parseISO(VIEW.rTo) - parseISO(VIEW.rFrom)) / 864e5) + 1;
+  $("#repRange").textContent = span + " day" + (span === 1 ? "" : "s");
+
+  const cl = cats().concat([{ id: "", name: "Unassigned", color: "#546566" }]);
+  const fl = facs().concat([{ id: "", name: "Unrecorded", short: "Unrecorded" }]);
+
+  // grid[catId][facId]
+  const grid = {}, catT = {}, facT = {};
+  cl.forEach(c => grid[c.id] = {});
+  loads.forEach(l => {
+    const t = DB.trucks[l.truckId];
+    const cid = t && DB.cats[t.catId] ? t.catId : "";
+    const fid = l.facId && DB.facs[l.facId] ? l.facId : "";
+    const v = Number(l.tons) || 0;
+    grid[cid] = grid[cid] || {};
+    grid[cid][fid] = (grid[cid][fid] || 0) + v;
+    catT[cid] = (catT[cid] || 0) + v;
+    facT[fid] = (facT[fid] || 0) + v;
+  });
+  const cShown = cl.filter(c => catT[c.id]);
+  const fShown = fl.filter(f => facT[f.id]);
+
+  $("#repStats").innerHTML =
+    stat("Total", n2(tons), "tons") + stat("Loads", loads.length) +
+    stat("Days with loads", days) +
+    stat("Truck types", cShown.length) + stat("Facilities", fShown.length);
+
+  // type bar
+  $("#repCatBar").innerHTML = tons
+    ? cShown.map(c => { const p = catT[c.id] / tons * 100;
+        return '<div style="flex:' + p + ' 1 0;background:' + esc(c.color) + '" title="' + esc(c.name) + ' ' + n2(catT[c.id]) + ' t">' + (p >= 9 ? n1(p) + "%" : "") + '</div>'; }).join("")
+    : '<div style="flex:1;background:var(--panel2);color:var(--dim2);font-size:12px">No loads in this range</div>';
+  $("#repCatKey").innerHTML = cShown.length
+    ? cShown.map(c => '<span class="k"><i class="swatch" style="background:' + esc(c.color) + '"></i>' + esc(c.name) +
+        ' <b>' + n2(catT[c.id]) + ' t</b> · <b>' + pct(catT[c.id], tons) + '</b></span>').join("")
+    : '<span class="k muted">Nothing recorded in this range.</span>';
+
+  // facility bar
+  $("#repFacBar").innerHTML = tons
+    ? fShown.map((f, i) => { const p = facT[f.id] / tons * 100;
+        return '<div style="flex:' + p + ' 1 0;background:' + facColor(i, f.id) + '" title="' + esc(f.name) + ' ' + n2(facT[f.id]) + ' t">' + (p >= 9 ? n1(p) + "%" : "") + '</div>'; }).join("")
+    : '<div style="flex:1;background:var(--panel2);color:var(--dim2);font-size:12px">No loads in this range</div>';
+  $("#repFacKey").innerHTML = fShown.length
+    ? fShown.map((f, i) => '<span class="k"><i class="swatch" style="background:' + facColor(i, f.id) + '"></i>' + esc(f.name) +
+        ' <b>' + n2(facT[f.id]) + ' t</b> · <b>' + pct(facT[f.id], tons) + '</b></span>').join("")
+    : '<span class="k muted">Nothing recorded in this range.</span>';
+
+  // matrix
+  let mh = '<thead><tr><th>Truck type</th>' + fShown.map(f => '<th>' + esc(f.short || f.name) + '</th>').join("") +
+    '<th>Total</th><th>% of all</th></tr></thead><tbody>';
+  cShown.forEach(c => {
+    const row = grid[c.id] || {};
+    mh += '<tr><td><span class="tag" style="border-color:' + esc(c.color) + '"><i class="swatch" style="background:' + esc(c.color) + '"></i>' + esc(c.name) + '</span></td>' +
+      fShown.map(f => '<td>' + (row[f.id] ? n2(row[f.id]) + '<div class="muted" style="font-size:10px">' + pct(row[f.id], catT[c.id]) + '</div>' : "—") + '</td>').join("") +
+      '<td>' + n2(catT[c.id]) + '</td><td style="color:' + esc(c.color) + '">' + pct(catT[c.id], tons) + '</td></tr>';
+  });
+  mh += '<tr class="total"><td>All types</td>' + fShown.map(f => '<td>' + n2(facT[f.id]) +
+    '<div class="muted" style="font-size:10px">' + pct(facT[f.id], tons) + '</div></td>').join("") +
+    '<td>' + n2(tons) + '</td><td>100.0%</td></tr></tbody>';
+  $("#repMatrix").innerHTML = cShown.length ? mh : '<tbody><tr><td class="empty">No loads in this range.</td></tr></tbody>';
+
+  // truck detail
+  const tg = {};
+  loads.forEach(l => {
+    const g = tg[l.truckId] || (tg[l.truckId] = { tons: 0, loads: 0, days: {}, fac: {} });
+    const v = Number(l.tons) || 0;
+    g.tons += v; g.loads++; g.days[l.date] = 1;
+    const fid = l.facId && DB.facs[l.facId] ? l.facId : "";
+    g.fac[fid] = (g.fac[fid] || 0) + v;
+  });
+  let th = '<thead><tr><th>Truck</th><th>Loads</th><th>Days</th><th>Avg/load</th>' +
+    fShown.map(f => '<th>' + esc(f.short || f.name) + '</th>').join("") + '<th>Total</th></tr></thead><tbody>';
+  let anyT = false;
+  cShown.forEach(c => {
+    const rows = trucks(false).filter(t => (t.catId || "") === c.id && (t.active !== false || tg[t.id]));
+    if (!rows.length) return;
+    anyT = true;
+    th += '<tr class="group"><td colspan="4"><span class="tag" style="border-color:' + esc(c.color) + '"><i class="swatch" style="background:' + esc(c.color) + '"></i>' + esc(c.name) + '</span></td>' +
+      fShown.map(f => '<td>' + ((grid[c.id] || {})[f.id] ? n2(grid[c.id][f.id]) : "—") + '</td>').join("") +
+      '<td>' + n2(catT[c.id]) + '</td></tr>';
+    rows.forEach(t => {
+      const g = tg[t.id] || { tons: 0, loads: 0, days: {}, fac: {} };
+      th += '<tr><td>' + esc(t.unit) + (t.active === false ? ' <span class="muted" style="font-size:10px">[inactive]</span>' : "") + '</td>' +
+        '<td>' + (g.loads || "—") + '</td><td>' + (Object.keys(g.days).length || "—") + '</td>' +
+        '<td>' + (g.loads ? n2(g.tons / g.loads) : "—") + '</td>' +
+        fShown.map(f => '<td>' + (g.fac[f.id] ? n2(g.fac[f.id]) : "—") + '</td>').join("") +
+        '<td>' + (g.tons ? n2(g.tons) : "—") + '</td></tr>';
+    });
+  });
+  th += '</tbody>';
+  $("#repTrucks").innerHTML = anyT ? th : '<tbody><tr><td class="empty">No trucks with loads in this range.</td></tr></tbody>';
+}
+async function ensureReportRange(force) {
+  for (const m of monthsBetween(VIEW.rFrom, VIEW.rTo)) { try { await ensureMonth(m, force); } catch (e) { } }
+}
+$("#repFrom").onclick = () => openCal($("#repFrom"), VIEW.rFrom, async v => {
+  VIEW.rFrom = v; if (VIEW.rTo < v) VIEW.rTo = v; VIEW.rPreset = "custom";
+  await ensureReportRange(); renderReport();
+}, { rangeFrom: VIEW.rFrom, rangeTo: VIEW.rTo });
+$("#repTo").onclick = () => openCal($("#repTo"), VIEW.rTo, async v => {
+  VIEW.rTo = v; if (VIEW.rFrom > v) VIEW.rFrom = v; VIEW.rPreset = "custom";
+  await ensureReportRange(); renderReport();
+}, { rangeFrom: VIEW.rFrom, rangeTo: VIEW.rTo });
+$("#repGo").onclick = async () => { await ensureReportRange(true); renderReport(); toast("Report refreshed"); };
+$("#repCsv").onclick = () => {
+  const loads = rangeLoads(VIEW.rFrom, VIEW.rTo);
+  const tons = loads.reduce((s, l) => s + (Number(l.tons) || 0), 0);
+  const cl = cats().concat([{ id: "", name: "Unassigned" }]);
+  const fl = facs().concat([{ id: "", name: "Unrecorded" }]);
+  const grid = {}, catT = {}, facT = {};
+  loads.forEach(l => {
+    const t = DB.trucks[l.truckId];
+    const cid = t && DB.cats[t.catId] ? t.catId : "", fid = l.facId && DB.facs[l.facId] ? l.facId : "";
+    const v = Number(l.tons) || 0;
+    (grid[cid] = grid[cid] || {})[fid] = (grid[cid][fid] || 0) + v;
+    catT[cid] = (catT[cid] || 0) + v; facT[fid] = (facT[fid] || 0) + v;
+  });
+  const cS = cl.filter(c => catT[c.id]), fS = fl.filter(f => facT[f.id]);
+  const rows = [["Truck type by facility"], ["Range", VIEW.rFrom + " to " + VIEW.rTo], []];
+  rows.push(["Truck type"].concat(fS.map(f => f.name + " tons")).concat(["Total tons", "Pct of all"]));
+  cS.forEach(c => rows.push([c.name].concat(fS.map(f => n2((grid[c.id] || {})[f.id] || 0))).concat([n2(catT[c.id]), n1(catT[c.id] / tons * 100) + "%"])));
+  rows.push(["TOTAL"].concat(fS.map(f => n2(facT[f.id]))).concat([n2(tons), "100%"]));
+  rows.push([]);
+  rows.push(["Truck", "Type"].concat(fS.map(f => f.name + " tons")).concat(["Loads", "Days", "Total tons"]));
+  const tg = {};
+  loads.forEach(l => {
+    const g = tg[l.truckId] || (tg[l.truckId] = { tons: 0, loads: 0, days: {}, fac: {} });
+    const v = Number(l.tons) || 0, fid = l.facId && DB.facs[l.facId] ? l.facId : "";
+    g.tons += v; g.loads++; g.days[l.date] = 1; g.fac[fid] = (g.fac[fid] || 0) + v;
+  });
+  trucks(false).forEach(t => {
+    const g = tg[t.id]; if (!g) return;
+    rows.push([t.unit, catOf(t).name].concat(fS.map(f => n2(g.fac[f.id] || 0))).concat([g.loads, Object.keys(g.days).length, n2(g.tons)]));
+  });
+  dl(new Blob([toCSV(rows)], { type: "text/csv" }), "tonnage-type-by-facility-" + VIEW.rFrom + "_to_" + VIEW.rTo + ".csv");
+};
+
+/* ============================================================
    MONTH
    ============================================================ */
 function weekdaysIn(m, capToday) {
@@ -1577,7 +1785,7 @@ function renderFleet() {
     '<div class="item"><input type="color" value="' + esc(c.color) + '" data-cc="' + c.id + '" style="width:36px;padding:2px">' +
     '<input class="grow" value="' + esc(c.name) + '" data-cn="' + c.id + '">' +
     '<span class="muted" style="font-size:11px">' + trucks(false).filter(t => t.catId === c.id).length + ' trucks</span>' +
-    (cs.length > 2 ? '<button class="btn sm danger" data-cx="' + c.id + '">Delete</button>' : "") + '</div>').join("");
+    (cs.length > 1 ? '<button class="btn sm danger" data-cx="' + c.id + '">Delete</button>' : "") + '</div>').join("");
 
   $("#newTruckCat").innerHTML = cs.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join("");
 
@@ -1843,7 +2051,7 @@ async function ensureMonth(m, force) {
   try { const v = await fbGet("loads/" + m); DB.loads[m] = v || {}; saveLocal(); setSync("ok"); }
   catch (e) { setSync("err", e.message); }
 }
-function renderAll() { renderDay(); renderSplit(); renderMonth(); renderFleet(); renderTrend(); renderCfg(); renderSug(); }
+function renderAll() { renderDay(); renderSplit(); renderReport(); renderMonth(); renderFleet(); renderTrend(); renderCfg(); renderSug(); }
 
 (async function init() {
   const adopted = adoptHash();
@@ -1868,7 +2076,13 @@ function renderAll() { renderDay(); renderSplit(); renderMonth(); renderFleet();
     flush(); startStream(); beat();
     if (!Object.keys(DB.trucks).length) seedCats();
     const board = await fbGet("trucks").catch(() => null);
-    if (!board) await pushSeed(); else bump("open");
+    if (!board) await pushSeed();
+    else {
+      const remote = await fbGet("cats").catch(() => null);
+      const gap = SEED_CATS.filter(c => !remote || !remote[c.id]);
+      if (gap.length) { try { await fbSend("PUT", "cats", DB.cats); bump("fleet"); } catch (e) { } }
+      else bump("open");
+    }
   }
   renderAll();
   checkUpdate(false);
