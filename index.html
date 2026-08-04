@@ -111,6 +111,14 @@ textarea{width:100%;min-height:110px;resize:vertical;line-height:1.5}
 .calfoot{display:flex;gap:6px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
 .calfoot button{flex:1}
 
+.delta{padding:14px 12px;border-top:1px solid var(--line);display:flex;gap:22px;flex-wrap:wrap}
+.delta .d{display:flex;flex-direction:column;gap:3px}
+.delta .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2)}
+.delta .amt{font-size:22px;font-variant-numeric:tabular-nums}
+.delta .amt.up{color:var(--bad)}
+.delta .amt.down{color:var(--acc)}
+.delta .sub{font-size:11px;color:var(--dim2)}
+.rateinput{width:104px;text-align:right}
 .sugwrap{margin-bottom:12px}
 .sugbar{display:flex;align-items:center;gap:9px;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:9px 12px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
 .sugbar:hover{border-color:var(--line2);color:var(--tx)}
@@ -225,6 +233,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
     <button data-tab="day" class="on">Day Entry</button>
     <button data-tab="split">Split</button>
     <button data-tab="report">Report</button>
+    <button data-tab="cost">Cost</button>
     <button data-tab="month">Month</button>
     <button data-tab="trend">Trend</button>
     <button data-tab="fleet">Fleet</button>
@@ -376,6 +385,53 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
   <div class="card">
     <h2>Truck detail</h2>
     <div class="wrap"><table id="repTrucks"></table></div>
+  </div>
+</section>
+
+<!-- ================= COST ================= -->
+<section id="tab-cost">
+  <div class="card">
+    <h2>Rates <span class="spacer"></span><span class="muted" style="font-size:11px">dollars per ton, by facility</span></h2>
+    <div class="wrap"><table id="rateTable"></table></div>
+    <div class="pad hint">Leave a cell blank if that rate does not apply. Tons dumped at a facility with no rate are counted but shown separately, so a missing number never quietly becomes zero dollars.</div>
+  </div>
+
+  <div class="card">
+    <h2>Cost comparison <span class="spacer"></span><span class="tag" id="costScope"></span><span class="muted" id="costRange"></span></h2>
+    <div class="pad" style="display:flex;flex-direction:column;gap:10px">
+      <div class="row">
+        <span class="hint">From</span>
+        <button class="dbtn" id="costFrom"><span id="costFromTxt"></span><span class="car">&#9662;</span></button>
+        <span class="hint">to</span>
+        <button class="dbtn" id="costTo"><span id="costToTxt"></span><span class="car">&#9662;</span></button>
+        <button class="btn sm" id="costGo">Run</button>
+        <span class="spacer"></span>
+        <button class="btn sm" id="costCsv">Export CSV</button>
+      </div>
+      <div class="presets" id="costPresets"></div>
+    </div>
+    <div class="stats" id="costStats"></div>
+    <div id="costDelta"></div>
+  </div>
+
+  <div class="card">
+    <h2>By facility</h2>
+    <div class="wrap"><table id="costFacTable"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>By truck type</h2>
+    <div class="wrap"><table id="costCatTable"></table></div>
+  </div>
+
+  <div class="card" id="costCoCard">
+    <h2>By county</h2>
+    <div class="wrap"><table id="costCoTable"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>Month by month</h2>
+    <div class="wrap"><table id="costMonthTable"></table></div>
   </div>
 </section>
 
@@ -607,8 +663,8 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
           {root}/loads/{YYYY-MM}/{id}  {root}/ctl  {root}/presence/{dev}
    ============================================================ */
 
-const BUILD = /*BUILD*/ 8;
-const BUILD_NOTES = "County dimension: Becker / Otter Tail, per-county reporting";
+const BUILD = /*BUILD*/ 9;
+const BUILD_NOTES = "Cost per ton: previous / current / proposed";
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -647,7 +703,7 @@ const LS = {
 };
 
 let CFG = Object.assign({ url: "", auth: "", root: "tonnage", sync: false, unit: "ton", fleet: "Steve's Sanitation", device: "", lastFac: "" }, LS.get("tl.cfg", {}));
-let DB = Object.assign({ cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {}, ideas: {}, cos: {} }, LS.get("tl.db", {}));
+let DB = Object.assign({ cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {}, ideas: {}, cos: {}, rates: {} }, LS.get("tl.db", {}));
 let PENDING = LS.get("tl.pend", []);
 let DEVICE_ID = LS.get("tl.devid", "");
 if (!DEVICE_ID) { DEVICE_ID = Math.random().toString(36).slice(2, 10); LS.set("tl.devid", DEVICE_ID); }
@@ -664,7 +720,8 @@ function monthsBetween(a, b) { const out = []; let m = a.slice(0, 7); const end 
 function saveLocal() { LS.set("tl.db", DB); LS.set("tl.cfg", CFG); LS.set("tl.pend", PENDING); }
 
 let VIEW = { day: isoToday(), month: isoToday().slice(0, 7), from: isoToday().slice(0, 7) + "-01", to: isoToday(), preset: "mtd",
-  rFrom: isoToday().slice(0, 7) + "-01", rTo: isoToday(), rPreset: "mtd", co: LS.get("tl.co", "") };
+  rFrom: isoToday().slice(0, 7) + "-01", rTo: isoToday(), rPreset: "mtd", co: LS.get("tl.co", ""),
+  cFrom: isoToday().slice(0, 7) + "-01", cTo: isoToday(), cPreset: "mtd" };
 
 let toastT;
 function toast(msg, bad) {
@@ -812,6 +869,7 @@ async function onCtl(ev) {
     if (c.kind === "load" && c.month) await ensureMonth(c.month, true);
     else if (c.kind === "county") { const v = await fbGet("county"); DB.county = v || {}; saveLocal(); }
     else if (c.kind === "ideas") { const v = await fbGet("ideas"); DB.ideas = v || {}; saveLocal(); }
+    else if (c.kind === "rates") { const v = await fbGet("rates"); DB.rates = v || {}; saveLocal(); }
     else if (c.kind === "fleet") {
       const a = await fbGet("cats"), b = await fbGet("trucks"), f = await fbGet("facs"), g = await fbGet("cos");
       if (a) DB.cats = a; if (b) DB.trucks = b; if (f) DB.facs = f; if (g) DB.cos = g;
@@ -982,6 +1040,44 @@ function saveCat(c) { DB.cats[c.id] = c; saveLocal(); push("cats/" + c.id, c); b
 function saveTruck(t) { DB.trucks[t.id] = t; saveLocal(); push("trucks/" + t.id, t); bump("fleet"); }
 function saveFac(f) { DB.facs = DB.facs || {}; DB.facs[f.id] = f; saveLocal(); push("facs/" + f.id, f); bump("fleet"); }
 function saveCo(c) { DB.cos = DB.cos || {}; DB.cos[c.id] = c; saveLocal(); push("cos/" + c.id, c); bump("fleet"); }
+
+/* ---- rates: dollars per ton, per facility, across three scenarios ---- */
+const SCEN = [
+  { k: "prev", label: "Previous", color: "#546566" },
+  { k: "cur",  label: "Current",  color: "#5fd3a4" },
+  { k: "prop", label: "Proposed", color: "#e0a458" }
+];
+function rateOf(facId, scen) {
+  const r = (DB.rates || {})[facId || "_none"];
+  const v = r ? Number(r[scen]) : NaN;
+  return isFinite(v) && v > 0 ? v : 0;
+}
+function saveRate(facId, scen, val) {
+  DB.rates = DB.rates || {};
+  const r = DB.rates[facId] || (DB.rates[facId] = { facId: facId });
+  r[scen] = isFinite(val) && val > 0 ? Math.round(val * 100) / 100 : 0;
+  r.ts = Date.now(); r.by = deviceName();
+  saveLocal(); push("rates/" + facId, r); bump("rates");
+}
+function hasRates(scen) { return facs().some(f => rateOf(f.id, scen) > 0); }
+/* cost of a set of loads under one scenario; untagged or unpriced tons are reported separately */
+function costOf(loads, scen) {
+  let cost = 0, priced = 0, unpriced = 0;
+  loads.forEach(l => {
+    const t = Number(l.tons) || 0, r = rateOf(l.facId, scen);
+    if (r > 0) { cost += t * r; priced += t; } else unpriced += t;
+  });
+  return { cost: cost, priced: priced, unpriced: unpriced };
+}
+function money(v) {
+  const n = Number(v) || 0;
+  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function money0(v) {
+  const n = Number(v) || 0;
+  return "$" + Math.round(n).toLocaleString("en-US");
+}
+function signed(v) { return (v > 0 ? "+" : "") + money(v); }
 /* delivered figures are stored per county: county/{coId}/{YYYY-MM} */
 function countyRec(m, coId) {
   const c = coId === undefined ? coFilter() : coId;
@@ -1215,6 +1311,7 @@ $$("nav button").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "month") renderMonth();
   if (b.dataset.tab === "split") renderSplit();
   if (b.dataset.tab === "report") renderReport();
+  if (b.dataset.tab === "cost") { renderRates(); renderCost(); }
   if (b.dataset.tab === "fleet") renderFleet();
   if (b.dataset.tab === "trend") renderTrend();
 });
@@ -1794,6 +1891,212 @@ $("#repCsv").onclick = () => {
 };
 
 /* ============================================================
+   COST
+   ============================================================ */
+function renderRates() {
+  const fl = facs();
+  let h = '<thead><tr><th>Facility</th>' + SCEN.map(x => '<th>' + x.label + ' $/ton</th>').join("") +
+    '<th>Current vs previous</th><th>Proposed vs current</th></tr></thead><tbody>';
+  fl.forEach(f => {
+    const prev = rateOf(f.id, "prev"), cur = rateOf(f.id, "cur"), prop = rateOf(f.id, "prop");
+    const cell = (base, next) => {
+      if (!base || !next) return '<td class="muted">—</td>';
+      const d = next - base, p = d / base * 100;
+      return '<td style="color:' + (d > 0 ? "var(--bad)" : d < 0 ? "var(--acc)" : "var(--dim)") + '">' +
+        (d > 0 ? "+" : "") + money(d) +
+        (d ? ' <span class="muted" style="font-size:10px">' + (d > 0 ? "+" : "") + n1(p) + '%</span>' : "") + '</td>';
+    };
+    h += '<tr><td>' + esc(f.name) + '</td>' +
+      SCEN.map(x => '<td><input class="rateinput" type="number" step="0.01" inputmode="decimal" placeholder="—" value="' +
+        (rateOf(f.id, x.k) || "") + '" data-rate="' + f.id + '" data-scen="' + x.k + '"></td>').join("") +
+      cell(prev, cur) + cell(cur, prop) + '</tr>';
+  });
+  h += '</tbody>';
+  $("#rateTable").innerHTML = fl.length ? h : '<tbody><tr><td class="empty">Add a facility under Fleet first.</td></tr></tbody>';
+  $$("#rateTable [data-rate]").forEach(i => i.onchange = () => {
+    saveRate(i.dataset.rate, i.dataset.scen, parseFloat(i.value));
+    renderRates(); renderCost();
+  });
+}
+
+function renderCost() {
+  $("#costFromTxt").textContent = longDate(VIEW.cFrom);
+  $("#costToTxt").textContent = longDate(VIEW.cTo);
+  $("#costScope").textContent = coLabel();
+  const span = Math.round((parseISO(VIEW.cTo) - parseISO(VIEW.cFrom)) / 864e5) + 1;
+  $("#costRange").textContent = span + " day" + (span === 1 ? "" : "s");
+  $("#costPresets").innerHTML = PRESETS.map(p => '<button class="btn sm' + (VIEW.cPreset === p.k ? " on" : "") + '" data-cp="' + p.k + '">' + p.label + '</button>').join("") +
+    '<button class="btn sm' + (VIEW.cPreset === "custom" ? " on" : "") + '" data-cp="custom">Custom</button>';
+  $$("#costPresets [data-cp]").forEach(b => b.onclick = async () => {
+    const p = PRESETS.find(x => x.k === b.dataset.cp);
+    VIEW.cPreset = b.dataset.cp;
+    if (p) { const r = p.calc(); VIEW.cFrom = r[0]; VIEW.cTo = r[1]; }
+    await ensureCostRange(); renderCost();
+  });
+
+  const loads = rangeLoads(VIEW.cFrom, VIEW.cTo);
+  const tons = loads.reduce((x, l) => x + (Number(l.tons) || 0), 0);
+  const res = {}; SCEN.forEach(x => res[x.k] = costOf(loads, x.k));
+
+  $("#costStats").innerHTML =
+    stat("Tons in range", n2(tons)) +
+    SCEN.map(x => stat(x.label + " cost", res[x.k].priced ? money0(res[x.k].cost) : "—")).join("") +
+    stat("Blended $/ton", res.cur.priced ? money(res.cur.cost / res.cur.priced) : "—");
+
+  // headline deltas
+  const mk = (from, to, label, note) => {
+    if (!res[from].priced || !res[to].priced) return "";
+    const d = res[to].cost - res[from].cost;
+    const p = res[from].cost ? d / res[from].cost * 100 : 0;
+    return '<div class="d"><span class="lbl">' + label + '</span>' +
+      '<span class="amt ' + (d > 0 ? "up" : d < 0 ? "down" : "") + '">' + signed(d) + '</span>' +
+      '<span class="sub">' + (d > 0 ? "+" : "") + n1(p) + '% · ' + note + '</span></div>';
+  };
+  const annual = (d) => {
+    const days = Math.max(1, span);
+    return money0(d / days * 365) + " a year at this pace";
+  };
+  let dh = "";
+  if (res.prev.priced && res.cur.priced) dh += mk("prev", "cur", "Current vs previous", annual(res.cur.cost - res.prev.cost));
+  if (res.cur.priced && res.prop.priced) dh += mk("cur", "prop", "Proposed vs current", annual(res.prop.cost - res.cur.cost));
+  if (res.prev.priced && res.prop.priced && res.cur.priced) dh += mk("prev", "prop", "Proposed vs previous", annual(res.prop.cost - res.prev.cost));
+  const unp = res.cur.unpriced || res.prop.unpriced || res.prev.unpriced;
+  $("#costDelta").innerHTML = (dh ? '<div class="delta">' + dh + '</div>' : "") +
+    (!hasRates("cur") && !hasRates("prop") && !hasRates("prev")
+      ? '<div class="empty">Enter at least one rate above to see costs.</div>' : "") +
+    (unp ? '<div class="pad hint"><span style="color:var(--warn)">' + n2(unp) + ' tons sit at a facility with no rate entered, so they are excluded from every figure above.</span></div>' : "");
+
+  // by facility
+  const fl = facs().concat([{ id: "", name: "Unrecorded", short: "Unrecorded" }]);
+  let fh = '<thead><tr><th>Facility</th><th>Tons</th>' + SCEN.map(x => '<th>' + x.label + ' $/t</th><th>' + x.label + ' cost</th>').join("") + '<th>Proposed change</th></tr></thead><tbody>';
+  let anyF = false;
+  fl.forEach(f => {
+    const sub = loads.filter(l => (l.facId || "") === f.id);
+    if (!sub.length) return;
+    anyF = true;
+    const st = sub.reduce((x, l) => x + (Number(l.tons) || 0), 0);
+    const c = {}; SCEN.forEach(x => c[x.k] = st * rateOf(f.id, x.k));
+    const d = (rateOf(f.id, "cur") && rateOf(f.id, "prop")) ? c.prop - c.cur : null;
+    fh += '<tr><td>' + esc(f.name) + '</td><td>' + n2(st) + '</td>' +
+      SCEN.map(x => '<td class="muted">' + (rateOf(f.id, x.k) ? money(rateOf(f.id, x.k)) : "—") + '</td>' +
+        '<td>' + (rateOf(f.id, x.k) ? money0(c[x.k]) : "—") + '</td>').join("") +
+      '<td style="color:' + (d === null ? "var(--dim2)" : d > 0 ? "var(--bad)" : "var(--acc)") + '">' + (d === null ? "—" : signed(d)) + '</td></tr>';
+  });
+  fh += '<tr class="total"><td>Total</td><td>' + n2(tons) + '</td>' +
+    SCEN.map(x => '<td></td><td>' + (res[x.k].priced ? money0(res[x.k].cost) : "—") + '</td>').join("") +
+    '<td>' + ((res.cur.priced && res.prop.priced) ? signed(res.prop.cost - res.cur.cost) : "—") + '</td></tr></tbody>';
+  $("#costFacTable").innerHTML = anyF ? fh : '<tbody><tr><td class="empty">No loads in this range.</td></tr></tbody>';
+
+  // by truck type
+  const cl = cats().concat([{ id: "", name: "Unassigned", color: "#546566" }]);
+  let ch = '<thead><tr><th>Truck type</th><th>Tons</th>' + SCEN.map(x => '<th>' + x.label + '</th>').join("") + '<th>Proposed change</th><th>Blended $/t</th></tr></thead><tbody>';
+  let anyC = false;
+  cl.forEach(c => {
+    const sub = loads.filter(l => { const t = DB.trucks[l.truckId]; return (t && DB.cats[t.catId] ? t.catId : "") === c.id; });
+    if (!sub.length) return;
+    anyC = true;
+    const st = sub.reduce((x, l) => x + (Number(l.tons) || 0), 0);
+    const r = {}; SCEN.forEach(x => r[x.k] = costOf(sub, x.k));
+    const d = (r.cur.priced && r.prop.priced) ? r.prop.cost - r.cur.cost : null;
+    ch += '<tr><td><span class="tag" style="border-color:' + esc(c.color) + '"><i class="swatch" style="background:' + esc(c.color) + '"></i>' + esc(c.name) + '</span></td>' +
+      '<td>' + n2(st) + '</td>' +
+      SCEN.map(x => '<td>' + (r[x.k].priced ? money0(r[x.k].cost) : "—") + '</td>').join("") +
+      '<td style="color:' + (d === null ? "var(--dim2)" : d > 0 ? "var(--bad)" : "var(--acc)") + '">' + (d === null ? "—" : signed(d)) + '</td>' +
+      '<td class="muted">' + (r.cur.priced ? money(r.cur.cost / r.cur.priced) : "—") + '</td></tr>';
+  });
+  ch += '</tbody>';
+  $("#costCatTable").innerHTML = anyC ? ch : '<tbody><tr><td class="empty">No loads in this range.</td></tr></tbody>';
+
+  // by county — only when combined
+  const coCard = $("#costCoCard");
+  if (coFilter()) coCard.style.display = "none";
+  else {
+    coCard.style.display = "";
+    const all = rangeLoadsAll(VIEW.cFrom, VIEW.cTo);
+    let oh = '<thead><tr><th>County</th><th>Tons</th>' + SCEN.map(x => '<th>' + x.label + '</th>').join("") + '<th>Proposed change</th></tr></thead><tbody>';
+    const list = cos().concat([{ id: "", name: "Unassigned county" }]);
+    let anyO = false;
+    list.forEach(c => {
+      const sub = all.filter(l => (l.coId || "") === c.id);
+      if (!sub.length) return;
+      anyO = true;
+      const st = sub.reduce((x, l) => x + (Number(l.tons) || 0), 0);
+      const r = {}; SCEN.forEach(x => r[x.k] = costOf(sub, x.k));
+      const d = (r.cur.priced && r.prop.priced) ? r.prop.cost - r.cur.cost : null;
+      oh += '<tr><td>' + esc(c.name) + '</td><td>' + n2(st) + '</td>' +
+        SCEN.map(x => '<td>' + (r[x.k].priced ? money0(r[x.k].cost) : "—") + '</td>').join("") +
+        '<td style="color:' + (d === null ? "var(--dim2)" : d > 0 ? "var(--bad)" : "var(--acc)") + '">' + (d === null ? "—" : signed(d)) + '</td></tr>';
+    });
+    const rAll = {}; SCEN.forEach(x => rAll[x.k] = costOf(all, x.k));
+    oh += '<tr class="total"><td>Both counties</td><td>' + n2(all.reduce((x, l) => x + (Number(l.tons) || 0), 0)) + '</td>' +
+      SCEN.map(x => '<td>' + (rAll[x.k].priced ? money0(rAll[x.k].cost) : "—") + '</td>').join("") +
+      '<td>' + ((rAll.cur.priced && rAll.prop.priced) ? signed(rAll.prop.cost - rAll.cur.cost) : "—") + '</td></tr></tbody>';
+    $("#costCoTable").innerHTML = anyO ? oh : '<tbody><tr><td class="empty">No loads in this range.</td></tr></tbody>';
+  }
+
+  // month by month
+  const ms = monthsBetween(VIEW.cFrom, VIEW.cTo);
+  let mh = '<thead><tr><th>Month</th><th>Tons</th>' + SCEN.map(x => '<th>' + x.label + '</th>').join("") + '<th>Proposed change</th></tr></thead><tbody>';
+  ms.forEach(m => {
+    const sub = monthLoads(m).filter(l => l.date >= VIEW.cFrom && l.date <= VIEW.cTo);
+    const st = sub.reduce((x, l) => x + (Number(l.tons) || 0), 0);
+    const r = {}; SCEN.forEach(x => r[x.k] = costOf(sub, x.k));
+    const d = (r.cur.priced && r.prop.priced) ? r.prop.cost - r.cur.cost : null;
+    mh += '<tr><td>' + monthLabel(m) + '</td><td>' + (st ? n2(st) : "—") + '</td>' +
+      SCEN.map(x => '<td>' + (r[x.k].priced ? money0(r[x.k].cost) : "—") + '</td>').join("") +
+      '<td style="color:' + (d === null ? "var(--dim2)" : d > 0 ? "var(--bad)" : "var(--acc)") + '">' + (d === null ? "—" : signed(d)) + '</td></tr>';
+  });
+  mh += '<tr class="total"><td>Range</td><td>' + n2(tons) + '</td>' +
+    SCEN.map(x => '<td>' + (res[x.k].priced ? money0(res[x.k].cost) : "—") + '</td>').join("") +
+    '<td>' + ((res.cur.priced && res.prop.priced) ? signed(res.prop.cost - res.cur.cost) : "—") + '</td></tr></tbody>';
+  $("#costMonthTable").innerHTML = mh;
+}
+async function ensureCostRange(force) {
+  for (const m of monthsBetween(VIEW.cFrom, VIEW.cTo)) { try { await ensureMonth(m, force); } catch (e) { } }
+}
+$("#costFrom").onclick = () => openCal($("#costFrom"), VIEW.cFrom, async v => {
+  VIEW.cFrom = v; if (VIEW.cTo < v) VIEW.cTo = v; VIEW.cPreset = "custom";
+  await ensureCostRange(); renderCost();
+}, { rangeFrom: VIEW.cFrom, rangeTo: VIEW.cTo });
+$("#costTo").onclick = () => openCal($("#costTo"), VIEW.cTo, async v => {
+  VIEW.cTo = v; if (VIEW.cFrom > v) VIEW.cFrom = v; VIEW.cPreset = "custom";
+  await ensureCostRange(); renderCost();
+}, { rangeFrom: VIEW.cFrom, rangeTo: VIEW.cTo });
+$("#costGo").onclick = async () => { await ensureCostRange(true); renderCost(); toast("Cost refreshed"); };
+$("#costCsv").onclick = () => {
+  const loads = rangeLoads(VIEW.cFrom, VIEW.cTo);
+  const tons = loads.reduce((x, l) => x + (Number(l.tons) || 0), 0);
+  const res = {}; SCEN.forEach(x => res[x.k] = costOf(loads, x.k));
+  const rows = [["Cost comparison"], ["Scope", coLabel()], ["Range", VIEW.cFrom + " to " + VIEW.cTo], []];
+  rows.push(["Rates ($/ton)"]);
+  rows.push(["Facility"].concat(SCEN.map(x => x.label)));
+  facs().forEach(f => rows.push([f.name].concat(SCEN.map(x => rateOf(f.id, x.k) || ""))));
+  rows.push([]);
+  rows.push(["By facility"]);
+  rows.push(["Facility", "Tons"].concat(SCEN.map(x => x.label + " cost")).concat(["Proposed vs current"]));
+  facs().concat([{ id: "", name: "Unrecorded" }]).forEach(f => {
+    const sub = loads.filter(l => (l.facId || "") === f.id);
+    if (!sub.length) return;
+    const st = sub.reduce((x, l) => x + (Number(l.tons) || 0), 0);
+    const c = {}; SCEN.forEach(x => c[x.k] = st * rateOf(f.id, x.k));
+    rows.push([f.name, n2(st)].concat(SCEN.map(x => rateOf(f.id, x.k) ? n2(c[x.k]) : "")).concat([(rateOf(f.id, "cur") && rateOf(f.id, "prop")) ? n2(c.prop - c.cur) : ""]));
+  });
+  rows.push(["TOTAL", n2(tons)].concat(SCEN.map(x => res[x.k].priced ? n2(res[x.k].cost) : "")).concat([(res.cur.priced && res.prop.priced) ? n2(res.prop.cost - res.cur.cost) : ""]));
+  rows.push([]);
+  rows.push(["By truck type"]);
+  rows.push(["Truck type", "Tons"].concat(SCEN.map(x => x.label + " cost")));
+  cats().forEach(c => {
+    const sub = loads.filter(l => { const t = DB.trucks[l.truckId]; return t && t.catId === c.id; });
+    if (!sub.length) return;
+    const st = sub.reduce((x, l) => x + (Number(l.tons) || 0), 0);
+    const r = {}; SCEN.forEach(x => r[x.k] = costOf(sub, x.k));
+    rows.push([c.name, n2(st)].concat(SCEN.map(x => r[x.k].priced ? n2(r[x.k].cost) : "")));
+  });
+  if (res.cur.unpriced) { rows.push([]); rows.push(["Tons with no rate entered", n2(res.cur.unpriced)]); }
+  dl(new Blob([toCSV(rows)], { type: "text/csv" }), "tonnage-cost-" + VIEW.cFrom + "_to_" + VIEW.cTo + ".csv");
+};
+
+/* ============================================================
    MONTH
    ============================================================ */
 function weekdaysIn(m, capToday) {
@@ -2133,6 +2436,7 @@ $("#btnPush").onclick = async () => {
     await fbSend("PUT", "county", DB.county || {});
     await fbSend("PUT", "ideas", DB.ideas || {});
     await fbSend("PUT", "cos", DB.cos || {});
+    await fbSend("PUT", "rates", DB.rates || {});
     for (const m in DB.loads) await fbSend("PUT", "loads/" + m, DB.loads[m]);
     setSync("ok"); toast("Everything pushed up");
   } catch (e) { setSync("err", e.message); toast("Push failed: " + e.message, true); }
@@ -2143,14 +2447,14 @@ $("#btnPull").onclick = async () => {
     const all = await fbGet("");
     if (!all) return toast("Nothing stored in the cloud yet", true);
     DB.cats = all.cats || DB.cats; DB.trucks = all.trucks || {}; DB.facs = all.facs || DB.facs; DB.loads = all.loads || {};
-    DB.county = all.county || {}; DB.ideas = all.ideas || {}; DB.cos = all.cos || DB.cos;
+    DB.county = all.county || {}; DB.ideas = all.ideas || {}; DB.cos = all.cos || DB.cos; DB.rates = all.rates || {};
     seedCats(); saveLocal(); renderAll(); toast("Pulled everything down");
   } catch (e) { toast("Pull failed: " + e.message, true); }
 };
 $("#btnBackup").onclick = () => dl(new Blob([JSON.stringify({ cfg: { fleet: CFG.fleet }, db: DB }, null, 2)], { type: "application/json" }), "tonnage-backup-" + isoToday() + ".json");
 $("#btnWipe").onclick = () => {
   if (!confirm("Erase all local trucks and loads from this browser? Cloud data is untouched.")) return;
-  DB = { cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {}, ideas: {}, cos: {} }; PENDING = [];
+  DB = { cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {}, ideas: {}, cos: {}, rates: {} }; PENDING = [];
   LS.set("tl.migCo", true);
   LS.set("tl.seedTrucks", false); LS.set("tl.seedFacs", false);
   seedCats(); saveLocal(); renderAll(); toast("Local data erased");
@@ -2324,7 +2628,7 @@ async function ensureMonth(m, force) {
   try { const v = await fbGet("loads/" + m); DB.loads[m] = v || {}; saveLocal(); setSync("ok"); }
   catch (e) { setSync("err", e.message); }
 }
-function renderAll() { calcCoTotals(); renderCoSwitch(); renderDay(); renderSplit(); renderReport(); renderMonth(); renderFleet(); renderTrend(); renderCfg(); renderSug(); }
+function renderAll() { calcCoTotals(); renderCoSwitch(); renderDay(); renderSplit(); renderReport(); renderRates(); renderCost(); renderMonth(); renderFleet(); renderTrend(); renderCfg(); renderSug(); }
 
 (async function init() {
   const adopted = adoptHash();
@@ -2340,6 +2644,7 @@ function renderAll() { calcCoTotals(); renderCoSwitch(); renderDay(); renderSpli
         DB.county = meta.county || DB.county || {};
         DB.ideas = meta.ideas || DB.ideas || {};
         if (meta.cos) DB.cos = meta.cos;
+        DB.rates = meta.rates || DB.rates || {};
         DB.loads = Object.assign({}, DB.loads, meta.loads || {});
         PRESENCE = meta.presence || {};
         if (meta.ctl) { LAST_CHANGE = meta.ctl; if (meta.ctl.build > BUILD) offerUpdate(meta.ctl.build); }
