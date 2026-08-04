@@ -125,6 +125,8 @@ textarea{width:100%;min-height:110px;resize:vertical;line-height:1.5}
 .delta .amt.down{color:var(--acc)}
 .delta .sub{font-size:11px;color:var(--dim2)}
 .rateinput{width:104px;text-align:right}
+.unitname{flex:1;min-width:200px;font-size:15px;letter-spacing:.02em;padding:9px 10px}
+.unitname:focus{background:var(--panel)}
 .sugwrap{margin-bottom:12px}
 .sugbar{display:flex;align-items:center;gap:9px;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:9px 12px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
 .sugbar:hover{border-color:var(--line2);color:var(--tx)}
@@ -529,8 +531,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
     <h2>Trucks</h2>
     <div class="list" id="truckList"></div>
     <div class="pad row">
-      <input id="newUnit" placeholder="Unit #" style="width:100px">
-      <input id="newLabel" placeholder="Description (optional)" style="flex:1;min-width:140px">
+      <input id="newUnit" placeholder="Truck name or unit #" style="flex:1;min-width:200px">
       <select id="newTruckCat"></select>
       <button class="btn pri" id="addTruck">Add truck</button>
     </div>
@@ -689,8 +690,8 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
           {root}/loads/{YYYY-MM}/{id}  {root}/ctl  {root}/presence/{dev}
    ============================================================ */
 
-const BUILD = /*BUILD*/ 12;
-const BUILD_NOTES = "Roll Off category, county restrictions per truck type";
+const BUILD = /*BUILD*/ 13;
+const BUILD_NOTES = "Full-width unit names in Fleet, description removed";
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -1567,7 +1568,7 @@ function renderDay() {
     const mine = byTruck[t.id] || [], sum = mine.reduce((s, l) => s + (Number(l.tons) || 0), 0);
     html += '<div class="truckrow" data-truck="' + t.id + '">' +
       '<div class="truckhead"><span class="unit">' + esc(t.unit) + '</span>' +
-      (t.label ? '<span class="muted" style="font-size:11px">' + esc(t.label) + '</span>' : "") +
+
       '<span class="tons' + (sum ? "" : " zero") + '">' + (sum ? n2(sum) + ' <span class="muted" style="font-size:11px">t</span>' : "—") + '</span></div>' +
       (mine.length ? '<div class="tickets">' + mine.map(l =>
         '<span class="ticket" style="border-left-color:' + esc(c.color) + '" title="' + esc(l.by ? "entered by " + l.by : "") + (l.ts ? " " + new Date(l.ts).toLocaleString() : "") + '">' + n2(l.tons) +
@@ -1802,7 +1803,7 @@ function renderSplit() {
     rows.forEach(t => {
       const x = a.trucks[t.id] || { tons: 0, loads: 0, days: {} };
       const nd = Object.keys(x.days).length;
-      th += '<tr><td>' + esc(t.unit) + (t.label ? ' <span class="muted" style="font-size:11px">' + esc(t.label) + '</span>' : "") + (t.active === false ? ' <span class="muted" style="font-size:10px">[inactive]</span>' : "") + '</td>' +
+      th += '<tr><td>' + esc(t.unit) + (t.active === false ? ' <span class="muted" style="font-size:10px">[inactive]</span>' : "") + '</td>' +
         '<td>' + (x.loads || "—") + '</td><td>' + (nd || "—") + '</td><td>' + (x.loads ? n2(x.tons / x.loads) : "—") + '</td>' +
         '<td>' + (x.tons ? n2(x.tons) : "—") + '</td><td>' + pct(x.tons, a.tons) + '</td><td>' + pct(x.tons, d.tons) + '</td>' +
         '<td class="barcell"><div><span class="bar" style="width:' + (x.tons / max * 100) + '%;background:' + esc(a.cat.color) + '"></span></div></td></tr>';
@@ -1853,15 +1854,15 @@ $("#rTo").onclick = () => openCal($("#rTo"), VIEW.to, async v => {
 $("#rGo").onclick = async () => { await ensureRange(true); renderSplit(); toast("Range refreshed"); };
 $("#rCsv").onclick = () => {
   const d = splitData();
-  const rows = [["Range", VIEW.from + " to " + VIEW.to], [], ["Category", "Unit", "Description", "Loads", "Days", "Net tons", "Avg tons/load", "Pct of category", "Pct of fleet"]];
+  const rows = [["Range", VIEW.from + " to " + VIEW.to], [], ["Category", "Unit", "Loads", "Days", "Net tons", "Avg tons/load", "Pct of category", "Pct of fleet"]];
   d.list.forEach(a => {
     Object.values(a.trucks).forEach(x => {
       const t = x.truck || {};
-      rows.push([a.cat.name, t.unit || "(deleted)", t.label || "", x.loads, Object.keys(x.days).length, n2(x.tons), n2(x.tons / x.loads), a.tons ? n1(x.tons / a.tons * 100) : "0", d.tons ? n1(x.tons / d.tons * 100) : "0"]);
+      rows.push([a.cat.name, t.unit || "(deleted)", x.loads, Object.keys(x.days).length, n2(x.tons), n2(x.tons / x.loads), a.tons ? n1(x.tons / a.tons * 100) : "0", d.tons ? n1(x.tons / d.tons * 100) : "0"]);
     });
-    rows.push([a.cat.name, "SUBTOTAL", "", a.loads, Object.keys(a.days).length, n2(a.tons), a.loads ? n2(a.tons / a.loads) : "", "100", d.tons ? n1(a.tons / d.tons * 100) : "0"]);
+    rows.push([a.cat.name, "SUBTOTAL", a.loads, Object.keys(a.days).length, n2(a.tons), a.loads ? n2(a.tons / a.loads) : "", "100", d.tons ? n1(a.tons / d.tons * 100) : "0"]);
   });
-  rows.push(["TOTAL", "", "", d.loads, d.days, n2(d.tons), d.loads ? n2(d.tons / d.loads) : "", "", "100"]);
+  rows.push(["TOTAL", "", d.loads, d.days, n2(d.tons), d.loads ? n2(d.tons / d.loads) : "", "", "100"]);
   const rl2 = rangeLoads(VIEW.from, VIEW.to), fT2 = facTotals(rl2);
   const fL2 = facs().concat([{ id: "", name: "Unrecorded" }]).filter(f => fT2[f.id]);
   if (fL2.length) {
@@ -2377,7 +2378,7 @@ function renderMonth() {
     h += '<tr class="group"><td colspan="4"><span class="tag" style="border-color:' + esc(g.cat.color) + '"><i class="swatch" style="background:' + esc(g.cat.color) + '"></i>' + esc(g.cat.name) + '</span></td>' +
       '<td>' + n2(g.tons) + '</td><td style="color:' + esc(g.cat.color) + '">' + pct(g.tons, s.totalTons) + '</td><td></td></tr>';
     g.rows.forEach(r => {
-      h += '<tr><td>' + esc(r.truck.unit) + (r.truck.label ? ' <span class="muted" style="font-size:11px">' + esc(r.truck.label) + '</span>' : "") + (r.truck.active === false ? ' <span class="muted" style="font-size:10px">[inactive]</span>' : "") + '</td>' +
+      h += '<tr><td>' + esc(r.truck.unit) + (r.truck.active === false ? ' <span class="muted" style="font-size:10px">[inactive]</span>' : "") + '</td>' +
         '<td>' + (r.loads || "—") + '</td><td>' + (r.days || "—") + '</td><td>' + (r.loads ? n2(r.tons / r.loads) : "—") + '</td>' +
         '<td>' + (r.tons ? n2(r.tons) : "—") + '</td><td>' + pct(r.tons, s.totalTons) + '</td>' +
         '<td class="barcell"><div><span class="bar" style="width:' + (r.tons / max * 100) + '%;background:' + esc(g.cat.color) + '"></span></div></td></tr>';
@@ -2545,8 +2546,7 @@ function renderFleet() {
 
   const ts = trucks(false);
   $("#truckList").innerHTML = ts.length ? ts.map(t =>
-    '<div class="item"><input value="' + esc(t.unit) + '" data-tu="' + t.id + '" style="width:90px">' +
-    '<input class="grow" value="' + esc(t.label || "") + '" placeholder="description" data-tl="' + t.id + '">' +
+    '<div class="item"><input class="unitname" value="' + esc(t.unit) + '" data-tu="' + t.id + '">' +
     '<select data-tc="' + t.id + '">' + cs.map(c => '<option value="' + c.id + '"' + (c.id === t.catId ? " selected" : "") + '>' + esc(c.name) + '</option>').join("") + '</select>' +
     '<label class="f" style="flex-direction:row;align-items:center;gap:5px;font-size:11px;text-transform:none;letter-spacing:0;color:' + (t.active === false ? "var(--dim2)" : "var(--tx)") + '"><input type="checkbox" data-ta="' + t.id + '"' + (t.active === false ? "" : " checked") + '> active</label>' +
     '<button class="btn sm danger" data-tx="' + t.id + '">Delete</button></div>').join("")
@@ -2583,7 +2583,6 @@ function renderFleet() {
     delete DB.cats[id]; saveLocal(); push("cats/" + id, null); renderAll();
   });
   $$("[data-tu]").forEach(i => i.onchange = () => { const t = DB.trucks[i.dataset.tu]; t.unit = i.value.trim() || t.unit; saveTruck(t); renderFleet(); });
-  $$("[data-tl]").forEach(i => i.onchange = () => { const t = DB.trucks[i.dataset.tl]; t.label = i.value.trim(); saveTruck(t); });
   $$("[data-tc]").forEach(i => i.onchange = () => { const t = DB.trucks[i.dataset.tc]; t.catId = i.value; saveTruck(t); renderFleet(); });
   $$("[data-ta]").forEach(i => i.onchange = () => { const t = DB.trucks[i.dataset.ta]; t.active = i.checked; saveTruck(t); renderFleet(); });
   $$("[data-tx]").forEach(b => b.onclick = () => {
@@ -2613,8 +2612,8 @@ $("#addCat").onclick = () => {
 };
 $("#addTruck").onclick = () => {
   const unit = $("#newUnit").value.trim(); if (!unit) return toast("Enter a unit number", true);
-  saveTruck({ id: uid(), unit: unit, label: $("#newLabel").value.trim(), catId: $("#newTruckCat").value, active: true });
-  $("#newUnit").value = ""; $("#newLabel").value = ""; renderFleet(); renderDay();
+  saveTruck({ id: uid(), unit: unit, catId: $("#newTruckCat").value, active: true });
+  $("#newUnit").value = ""; renderFleet(); renderDay();
 };
 $("#addCo").onclick = () => {
   const name = $("#newCoName").value.trim(); if (!name) return toast("Name the county first", true);
@@ -2713,12 +2712,12 @@ function toCSV(rows) { return rows.map(r => r.map(csvCell).join(",")).join("\r\n
 
 $("#mCsvSum").onclick = () => {
   const s = summarize(VIEW.month);
-  const rows = [["Month", "Category", "Unit", "Description", "Loads", "Days run", "Net tons", "Avg tons per load", "Pct of fleet"]];
+  const rows = [["Month", "Category", "Unit", "Loads", "Days run", "Net tons", "Avg tons per load", "Pct of fleet"]];
   s.groups.forEach(g => {
-    g.rows.forEach(r => rows.push([VIEW.month, g.cat.name, r.truck.unit, r.truck.label || "", r.loads, r.days, n2(r.tons), r.loads ? n2(r.tons / r.loads) : "", s.totalTons ? n1(r.tons / s.totalTons * 100) : "0"]));
-    rows.push([VIEW.month, g.cat.name, "SUBTOTAL", "", g.loads, "", n2(g.tons), "", s.totalTons ? n1(g.tons / s.totalTons * 100) : "0"]);
+    g.rows.forEach(r => rows.push([VIEW.month, g.cat.name, r.truck.unit, r.loads, r.days, n2(r.tons), r.loads ? n2(r.tons / r.loads) : "", s.totalTons ? n1(r.tons / s.totalTons * 100) : "0"]));
+    rows.push([VIEW.month, g.cat.name, "SUBTOTAL", g.loads, "", n2(g.tons), "", s.totalTons ? n1(g.tons / s.totalTons * 100) : "0"]);
   });
-  rows.push([VIEW.month, "TOTAL", "", "", s.totalLoads, s.opDays, n2(s.totalTons), s.totalLoads ? n2(s.totalTons / s.totalLoads) : "", "100"]);
+  rows.push([VIEW.month, "TOTAL", "", s.totalLoads, s.opDays, n2(s.totalTons), s.totalLoads ? n2(s.totalTons / s.totalLoads) : "", "100"]);
   const fT = facTotals(monthLoads(VIEW.month));
   const fList = facs().concat([{ id: "", name: "Unrecorded" }]).filter(f => fT[f.id]);
   if (fList.length) {
