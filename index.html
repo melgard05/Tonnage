@@ -44,6 +44,13 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#0b0f1
 .statpanel .who{display:flex;align-items:center;gap:7px;padding:2px 0}
 .statpanel .who i{width:7px;height:7px;border-radius:50%;background:var(--acc);flex:none}
 .statpanel .who i.off{background:var(--dim2)}
+.coswitch{display:flex;gap:0;margin-top:9px;border:1px solid var(--line2);border-radius:4px;overflow:hidden}
+.cobtn{flex:1;background:var(--panel2);border:0;border-right:1px solid var(--line2);color:var(--dim);padding:8px 6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cobtn:last-child{border-right:0}
+.cobtn:hover{color:var(--tx)}
+.cobtn.on{background:var(--acc-d);color:var(--acc)}
+.cobtn .sub{display:block;font-size:9px;letter-spacing:.04em;color:var(--dim2);margin-top:2px;text-transform:none}
+.cobtn.on .sub{color:var(--acc);opacity:.75}
 .updbar{display:none;align-items:center;gap:10px;justify-content:center;flex-wrap:wrap;background:var(--acc-d);border-bottom:1px solid var(--acc);color:var(--acc);padding:9px 12px;font-size:12px;position:sticky;top:0;z-index:30}
 .updbar.show{display:flex}
 nav{display:flex;gap:2px;margin-top:10px;overflow-x:auto;scrollbar-width:none}
@@ -169,6 +176,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
 .facbtn:last-child{border-right:0}
 .facbtn:hover{color:var(--tx)}
 .facbtn.on{background:var(--acc-d);color:var(--acc)}
+.facbtn.cob.on{background:#2a2438;color:#c98bdb}
 .daynav{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .daynav .dow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--acc)}
 .daynav .dow.wknd{color:var(--warn)}
@@ -212,6 +220,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
     </button>
   </div>
   <div class="statpanel" id="statusPanel"></div>
+  <div class="coswitch" id="coSwitch"></div>
   <nav>
     <button data-tab="day" class="on">Day Entry</button>
     <button data-tab="split">Split</button>
@@ -266,7 +275,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
 <!-- ================= SPLIT ================= -->
 <section id="tab-split">
   <div class="card">
-    <h2>Roto-Pac vs Rear Load <span class="spacer"></span><span class="muted" id="rDays"></span></h2>
+    <h2>Split by truck type <span class="spacer"></span><span class="tag" id="rScope"></span><span class="muted" id="rDays"></span></h2>
     <div class="pad" style="display:flex;flex-direction:column;gap:10px">
       <div class="row">
         <span class="hint">From</span>
@@ -318,7 +327,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
 <!-- ================= REPORT ================= -->
 <section id="tab-report">
   <div class="card">
-    <h2>Truck type &times; facility <span class="spacer"></span><span class="muted" id="repRange"></span></h2>
+    <h2>Truck type &times; facility <span class="spacer"></span><span class="tag" id="repScope"></span><span class="muted" id="repRange"></span></h2>
     <div class="pad" style="display:flex;flex-direction:column;gap:10px">
       <div class="row">
         <span class="hint">From</span>
@@ -350,6 +359,15 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
     </div>
   </div>
 
+  <div class="card" id="repCoCard">
+    <h2>Tons by county</h2>
+    <div class="split">
+      <div class="splitbar" id="repCoBar"></div>
+      <div class="splitkey" id="repCoKey"></div>
+    </div>
+    <div class="wrap" style="margin-top:12px"><table id="repCoTable"></table></div>
+  </div>
+
   <div class="card">
     <h2>Matrix <span class="spacer"></span><span class="muted" style="font-size:11px">every truck type against every facility</span></h2>
     <div class="wrap"><table id="repMatrix"></table></div>
@@ -364,7 +382,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
 <!-- ================= MONTH ================= -->
 <section id="tab-month">
   <div class="card">
-    <h2>Monthly Tonnage</h2>
+    <h2>Monthly Tonnage <span class="spacer"></span><span class="tag" id="mScope"></span></h2>
     <div class="pad row">
       <button class="btn sm" id="mPrev">&larr;</button>
       <button class="dbtn" id="mPick"><span id="mPickTxt"></span><span class="car">&#9662;</span></button>
@@ -378,8 +396,9 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
     <div class="wrap"><table id="mTable"></table></div>
   </div>
   <div class="card">
-    <h2>County delivered total <span class="spacer"></span><span class="muted" id="cMonthLbl"></span></h2>
-    <div class="pad row">
+    <h2>County delivered total <span class="spacer"></span><span class="tag" id="cScope"></span><span class="muted" id="cMonthLbl"></span></h2>
+    <div id="cEntry"></div>
+    <div class="pad row" id="cSingle">
       <label class="f">Tons reported by county
         <input type="number" step="0.01" inputmode="decimal" id="cTons" placeholder="0.00" style="width:130px"></label>
       <label class="f" style="flex:1;min-width:180px">Note (invoice #, facility, etc.)
@@ -438,6 +457,16 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
       <button class="btn pri" id="addTruck">Add truck</button>
     </div>
     <div class="pad hint">Inactive trucks stay in history but drop off the dump sheet.</div>
+  </div>
+  <div class="card">
+    <h2>Counties</h2>
+    <div class="list" id="coList"></div>
+    <div class="pad row">
+      <input id="newCoName" placeholder="Full name" style="flex:1;min-width:160px">
+      <input id="newCoShort" placeholder="Button label" style="width:130px">
+      <button class="btn" id="addCo">Add county</button>
+    </div>
+    <div class="pad hint">Each county reports its own delivered total, so reports can run per county or combined.</div>
   </div>
   <div class="card">
     <h2>Dumping facilities</h2>
@@ -523,7 +552,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
   <div class="card">
     <h2>Import scale tickets</h2>
     <div class="pad">
-      <div class="hint" style="margin-bottom:8px">Paste CSV with a header row. Recognized columns: <span style="color:var(--acc)">date, truck, tons</span> (or lbs/pounds/weight), ticket, site, material. Trucks match on unit number.</div>
+      <div class="hint" style="margin-bottom:8px">Paste CSV with a header row. Recognized columns: <span style="color:var(--acc)">date, truck, tons</span> (or lbs/pounds/weight), ticket, facility, county, material. Trucks match on unit number; county defaults to Becker when the column is missing.</div>
       <textarea id="csvIn" spellcheck="false" placeholder="date,truck,tons,ticket,site&#10;2026-07-06,204,8.42,118374,Otter Tail Landfill"></textarea>
       <div class="row" style="margin-top:8px">
         <button class="btn pri" id="btnImport">Import</button>
@@ -578,8 +607,8 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
           {root}/loads/{YYYY-MM}/{id}  {root}/ctl  {root}/presence/{dev}
    ============================================================ */
 
-const BUILD = /*BUILD*/ 7;
-const BUILD_NOTES = "Side Load category, truck-type by facility report";
+const BUILD = /*BUILD*/ 8;
+const BUILD_NOTES = "County dimension: Becker / Otter Tail, per-county reporting";
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -602,6 +631,10 @@ const SEED_TRUCKS = [
   { id: "t_pacman",      unit: "Pac-Man",         label: "", catId: "rearload", active: true },
   { id: "t_reaper",      unit: "Rubbish Reaper",  label: "", catId: "rearload", active: true }
 ];
+const SEED_COS = [
+  { id: "becker",    name: "Becker County",    short: "Becker",     order: 0 },
+  { id: "ottertail", name: "Otter Tail County", short: "Otter Tail", order: 1 }
+];
 const SEED_FACS = [
   { id: "becker", name: "Becker Transfer",    short: "Becker", order: 0 },
   { id: "perham", name: "Perham Incinerator", short: "Perham", order: 1 }
@@ -614,7 +647,7 @@ const LS = {
 };
 
 let CFG = Object.assign({ url: "", auth: "", root: "tonnage", sync: false, unit: "ton", fleet: "Steve's Sanitation", device: "", lastFac: "" }, LS.get("tl.cfg", {}));
-let DB = Object.assign({ cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {}, ideas: {} }, LS.get("tl.db", {}));
+let DB = Object.assign({ cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {}, ideas: {}, cos: {} }, LS.get("tl.db", {}));
 let PENDING = LS.get("tl.pend", []);
 let DEVICE_ID = LS.get("tl.devid", "");
 if (!DEVICE_ID) { DEVICE_ID = Math.random().toString(36).slice(2, 10); LS.set("tl.devid", DEVICE_ID); }
@@ -631,7 +664,7 @@ function monthsBetween(a, b) { const out = []; let m = a.slice(0, 7); const end 
 function saveLocal() { LS.set("tl.db", DB); LS.set("tl.cfg", CFG); LS.set("tl.pend", PENDING); }
 
 let VIEW = { day: isoToday(), month: isoToday().slice(0, 7), from: isoToday().slice(0, 7) + "-01", to: isoToday(), preset: "mtd",
-  rFrom: isoToday().slice(0, 7) + "-01", rTo: isoToday(), rPreset: "mtd" };
+  rFrom: isoToday().slice(0, 7) + "-01", rTo: isoToday(), rPreset: "mtd", co: LS.get("tl.co", "") };
 
 let toastT;
 function toast(msg, bad) {
@@ -780,8 +813,8 @@ async function onCtl(ev) {
     else if (c.kind === "county") { const v = await fbGet("county"); DB.county = v || {}; saveLocal(); }
     else if (c.kind === "ideas") { const v = await fbGet("ideas"); DB.ideas = v || {}; saveLocal(); }
     else if (c.kind === "fleet") {
-      const a = await fbGet("cats"), b = await fbGet("trucks"), f = await fbGet("facs");
-      if (a) DB.cats = a; if (b) DB.trucks = b; if (f) DB.facs = f;
+      const a = await fbGet("cats"), b = await fbGet("trucks"), f = await fbGet("facs"), g = await fbGet("cos");
+      if (a) DB.cats = a; if (b) DB.trucks = b; if (f) DB.facs = f; if (g) DB.cos = g;
       seedCats(); saveLocal();
     }
     renderAll();
@@ -902,6 +935,21 @@ function trucks(activeOnly) {
       String(a.unit).localeCompare(String(b.unit), undefined, { numeric: true });
   });
 }
+function cos() { return Object.values(DB.cos || {}).sort((a, b) => (a.order || 0) - (b.order || 0) || a.name.localeCompare(b.name)); }
+function coOf(l) {
+  const c = l && l.coId && DB.cos ? DB.cos[l.coId] : null;
+  return c || { id: "", name: "Unassigned county", short: "Unassigned" };
+}
+function defaultCoId() { const cs = cos(); if (!cs.length) return ""; return DB.cos[CFG.lastCo] ? CFG.lastCo : cs[0].id; }
+/* the active county filter: "" means all counties combined */
+function coFilter() { return VIEW.co && DB.cos[VIEW.co] ? VIEW.co : ""; }
+function inCo(l) { const f = coFilter(); return !f || (l.coId || "") === f; }
+function coLabel() { const f = coFilter(); return f ? DB.cos[f].name : "All counties"; }
+function coTotals(loads) {
+  const out = {};
+  loads.forEach(l => { const id = l.coId || ""; out[id] = (out[id] || 0) + (Number(l.tons) || 0); });
+  return out;
+}
 function facs() { return Object.values(DB.facs || {}).sort((a, b) => (a.order || 0) - (b.order || 0) || a.name.localeCompare(b.name)); }
 function facOf(l) {
   const f = l && l.facId && DB.facs ? DB.facs[l.facId] : null;
@@ -915,11 +963,17 @@ function facTotals(loads) {
   return out;
 }
 function catOf(t) { return (t && DB.cats[t.catId]) || { id: "", name: "Unassigned", color: "#546566" }; }
-function monthLoads(m) { return Object.values(DB.loads[m] || {}); }
-function dayLoads(d) { return monthLoads(d.slice(0, 7)).filter(l => l.date === d); }
+function allMonthLoads(m) { return Object.values(DB.loads[m] || {}); }
+function monthLoads(m) { return allMonthLoads(m).filter(inCo); }
+function dayLoads(d) { return allMonthLoads(d.slice(0, 7)).filter(l => l.date === d); }
 function rangeLoads(a, b) {
   const out = [];
   monthsBetween(a, b).forEach(m => monthLoads(m).forEach(l => { if (l.date >= a && l.date <= b) out.push(l); }));
+  return out;
+}
+function rangeLoadsAll(a, b) {
+  const out = [];
+  monthsBetween(a, b).forEach(m => allMonthLoads(m).forEach(l => { if (l.date >= a && l.date <= b) out.push(l); }));
   return out;
 }
 function saveLoad(rec) { const m = rec.date.slice(0, 7); DB.loads[m] = DB.loads[m] || {}; DB.loads[m][rec.id] = rec; saveLocal(); push("loads/" + m + "/" + rec.id, rec); bump("load", m); }
@@ -927,13 +981,38 @@ function deleteLoad(m, id) { if (DB.loads[m]) delete DB.loads[m][id]; saveLocal(
 function saveCat(c) { DB.cats[c.id] = c; saveLocal(); push("cats/" + c.id, c); bump("fleet"); }
 function saveTruck(t) { DB.trucks[t.id] = t; saveLocal(); push("trucks/" + t.id, t); bump("fleet"); }
 function saveFac(f) { DB.facs = DB.facs || {}; DB.facs[f.id] = f; saveLocal(); push("facs/" + f.id, f); bump("fleet"); }
-function countyRec(m) { return (DB.county || {})[m] || null; }
-function countyTons(m) { const r = countyRec(m); return r ? Number(r.tons) || 0 : 0; }
-function saveCounty(m, tons, note) {
-  DB.county = DB.county || {};
-  if (!tons) { delete DB.county[m]; saveLocal(); push("county/" + m, null); bump("county", m); return; }
-  const rec = { month: m, tons: Math.round(Number(tons) * 1000) / 1000, note: note || "", ts: Date.now(), by: deviceName() };
-  DB.county[m] = rec; saveLocal(); push("county/" + m, rec); bump("county", m);
+function saveCo(c) { DB.cos = DB.cos || {}; DB.cos[c.id] = c; saveLocal(); push("cos/" + c.id, c); bump("fleet"); }
+/* delivered figures are stored per county: county/{coId}/{YYYY-MM} */
+function countyRec(m, coId) {
+  const c = coId === undefined ? coFilter() : coId;
+  const node = (DB.county || {})[c || "_none"];
+  return (node && node[m]) || null;
+}
+/* with no filter, the reported total is the sum of every county that has a figure */
+function countyTons(m, coId) {
+  const c = coId === undefined ? coFilter() : coId;
+  if (c) { const r = countyRec(m, c); return r ? Number(r.tons) || 0 : 0; }
+  return cos().reduce((s, x) => { const r = countyRec(m, x.id); return s + (r ? Number(r.tons) || 0 : 0); }, 0);
+}
+/* true only when every county has reported for that month */
+function countyComplete(m) {
+  const c = coFilter();
+  if (c) return !!countyRec(m, c);
+  const cs = cos();
+  return cs.length > 0 && cs.every(x => !!countyRec(m, x.id));
+}
+function countyMissing(m) {
+  const c = coFilter();
+  if (c) return countyRec(m, c) ? [] : [DB.cos[c].name];
+  return cos().filter(x => !countyRec(m, x.id)).map(x => x.name);
+}
+function saveCounty(m, tons, note, coId) {
+  const c = coId || coFilter() || defaultCoId();
+  if (!c) return;
+  DB.county = DB.county || {}; DB.county[c] = DB.county[c] || {};
+  if (!tons) { delete DB.county[c][m]; saveLocal(); push("county/" + c + "/" + m, null); bump("county", m); return; }
+  const rec = { month: m, coId: c, tons: Math.round(Number(tons) * 1000) / 1000, note: note || "", ts: Date.now(), by: deviceName() };
+  DB.county[c][m] = rec; saveLocal(); push("county/" + c + "/" + m, rec); bump("county", m);
 }
 function monthEnd(m) { const p = m.split("-").map(Number); return toISO(new Date(p[0], p[1], 0)); }
 /* tons per category for an arbitrary set of loads */
@@ -1055,6 +1134,35 @@ function drawCal() {
 }
 
 /* ============================================================
+   County switcher
+   ============================================================ */
+function renderCoSwitch() {
+  const cs = cos();
+  if (!cs.length) { $("#coSwitch").innerHTML = ""; return; }
+  const cur = coFilter();
+  const mk = (id, label) => {
+    const tons = COTOT[id === "" ? "_all" : id];
+    return '<button class="cobtn' + (cur === id ? " on" : "") + '" data-co="' + id + '">' + esc(label) +
+      '<span class="sub">' + (tons === undefined ? "" : n1(tons) + " t this month") + '</span></button>';
+  };
+  $("#coSwitch").innerHTML = cs.map(c => mk(c.id, c.short || c.name)).join("") + mk("", "Both");
+  $$("#coSwitch [data-co]").forEach(b => b.onclick = () => {
+    VIEW.co = b.dataset.co; LS.set("tl.co", VIEW.co);
+    renderAll();
+    toast("Showing " + coLabel());
+  });
+}
+/* month-to-date tons per county, for the switcher subtitles */
+let COTOT = {};
+function calcCoTotals() {
+  const m = isoToday().slice(0, 7);
+  const t = coTotals(allMonthLoads(m));
+  COTOT = {}; let all = 0;
+  cos().forEach(c => { COTOT[c.id] = t[c.id] || 0; all += t[c.id] || 0; });
+  COTOT._all = all + (t[""] || 0);
+}
+
+/* ============================================================
    Suggestions
    ============================================================ */
 function ideas() {
@@ -1123,7 +1231,7 @@ function renderDay() {
   dow.className = "dow wknd";
   $("#dayUnitNote").textContent = CFG.unit === "lb" ? "entering pounds" : "entering net tons";
 
-  const loads = dayLoads(date), byTruck = {};
+  const loads = dayLoads(date).filter(inCo), byTruck = {};
   loads.forEach(l => (byTruck[l.truckId] = byTruck[l.truckId] || []).push(l));
   const tot = loads.reduce((s, l) => s + (Number(l.tons) || 0), 0);
 
@@ -1152,21 +1260,27 @@ function renderDay() {
       '<span class="tons' + (sum ? "" : " zero") + '">' + (sum ? n2(sum) + ' <span class="muted" style="font-size:11px">t</span>' : "—") + '</span></div>' +
       (mine.length ? '<div class="tickets">' + mine.map(l =>
         '<span class="ticket" style="border-left-color:' + esc(c.color) + '" title="' + esc(l.by ? "entered by " + l.by : "") + (l.ts ? " " + new Date(l.ts).toLocaleString() : "") + '">' + n2(l.tons) +
-        '<span class="meta">' + [esc(facOf(l).short || ""), l.ticket ? "#" + esc(l.ticket) : "", esc(l.material || ""), l.by && l.by !== deviceName() ? esc(l.by) : ""].filter(Boolean).join(" · ") + '</span>' +
+        '<span class="meta">' + [coFilter() ? "" : esc(coOf(l).short || ""), esc(facOf(l).short || ""), l.ticket ? "#" + esc(l.ticket) : "", esc(l.material || ""), l.by && l.by !== deviceName() ? esc(l.by) : ""].filter(Boolean).join(" · ") + '</span>' +
         '<button data-del="' + l.id + '" title="Remove load">&times;</button></span>').join("") + '</div>' : "") +
-      '<div class="addline" data-fac="' + esc(defaultFacId()) + '">' +
+      '<div class="addline" data-fac="' + esc(defaultFacId()) + '" data-co="' + esc(entryCoId()) + '">' +
       '<input class="t" type="number" step="0.01" inputmode="decimal" placeholder="' + (CFG.unit === "lb" ? "lbs" : "tons") + '" data-f="tons">' +
       '<input class="tk" placeholder="ticket #" data-f="ticket">' +
+      '<span class="facsel">' + cos().map(c => '<button type="button" class="facbtn cob' + (c.id === entryCoId() ? " on" : "") + '" data-coid="' + c.id + '">' + esc(c.short || c.name) + '</button>').join("") + '</span>' +
       '<span class="facsel">' + facs().map(f => '<button type="button" class="facbtn' + (f.id === defaultFacId() ? " on" : "") + '" data-fid="' + f.id + '">' + esc(f.short || f.name) + '</button>').join("") + '</span>' +
       '<select data-f="material"><option value="MSW">MSW</option><option value="Recycle">Recycle</option><option value="C&D">C&amp;D</option><option value="Demo">Demo</option><option value="Yard">Yard</option><option value="Other">Other</option></select>' +
       '<button class="btn sm pri" data-add="' + t.id + '">Add load</button></div></div>';
   });
   list.innerHTML = html;
 
-  $$("#dayList .facbtn").forEach(b => b.onclick = () => {
+  $$("#dayList [data-fid]").forEach(b => b.onclick = () => {
     const line = b.closest(".addline");
     line.dataset.fac = b.dataset.fid;
-    $$(".facbtn", line).forEach(x => x.classList.toggle("on", x === b));
+    $$("[data-fid]", line).forEach(x => x.classList.toggle("on", x === b));
+  });
+  $$("#dayList [data-coid]").forEach(b => b.onclick = () => {
+    const line = b.closest(".addline");
+    line.dataset.co = b.dataset.coid;
+    $$("[data-coid]", line).forEach(x => x.classList.toggle("on", x === b));
   });
   $$("#dayList [data-add]").forEach(b => b.onclick = () => addFromRow(b.closest(".truckrow")));
   $$("#dayList input[data-f=tons],#dayList input[data-f=ticket]").forEach(i => i.onkeydown = e => { if (e.key === "Enter") addFromRow(i.closest(".truckrow")); });
@@ -1184,6 +1298,8 @@ function renderDay() {
       keys.map(k => '<tr><td><span class="tag"><i class="swatch" style="background:' + esc(cs[k].color) + '"></i>' + esc(k) + '</span></td><td>' + cs[k].loads + '</td><td>' + n2(cs[k].tons) + '</td><td>' + pct(cs[k].tons, tot) + '</td></tr>').join("") +
       '</tbody></table></div>' : "";
 }
+/* when a county filter is active, new loads default to it */
+function entryCoId() { return coFilter() || defaultCoId(); }
 function addFromRow(row) {
   const id = row.dataset.truck, tIn = $('input[data-f=tons]', row);
   let val = parseFloat(tIn.value);
@@ -1193,10 +1309,12 @@ function addFromRow(row) {
   const facId = line ? (line.dataset.fac || defaultFacId()) : defaultFacId();
   if (!facId) return toast("Add a dumping facility under Fleet first", true);
   const fac = DB.facs[facId] || {};
+  const coId = line ? (line.dataset.co || entryCoId()) : entryCoId();
+  if (!coId) return toast("Add a county under Fleet first", true);
   const rec = { id: uid(), date: VIEW.day, truckId: id, tons: Math.round(val * 1000) / 1000,
     ticket: $('input[data-f=ticket]', row).value.trim(), facId: facId, site: fac.name || "",
-    material: $('select[data-f=material]', row).value, ts: Date.now(), by: deviceName() };
-  CFG.lastFac = facId; saveLocal();
+    coId: coId, material: $('select[data-f=material]', row).value, ts: Date.now(), by: deviceName() };
+  CFG.lastFac = facId; CFG.lastCo = coId; saveLocal();
   saveLoad(rec); renderDay();
   const nx = $('.truckrow[data-truck="' + id + '"] input[data-f=tons]'); if (nx) nx.focus();
 }
@@ -1255,6 +1373,7 @@ function renderSplit() {
   renderPresets();
   const span = Math.round((parseISO(VIEW.to) - parseISO(VIEW.from)) / 864e5) + 1;
   $("#rDays").textContent = span + " calendar day" + (span === 1 ? "" : "s");
+  $("#rScope").textContent = coLabel();
 
   const d = splitData();
   const shown = d.list.filter(a => a.tons > 0);
@@ -1320,8 +1439,8 @@ function renderSplit() {
   const allMonths = monthsBetween(VIEW.from, VIEW.to);
   const whole = allMonths.filter(m => (m + "-01") >= VIEW.from && monthEnd(m) <= VIEW.to);
   const partial = allMonths.filter(m => whole.indexOf(m) < 0);
-  const withFig = whole.filter(m => countyTons(m) > 0);
-  const missing = whole.filter(m => !countyTons(m));
+  const withFig = whole.filter(m => countyComplete(m));
+  const missing = whole.filter(m => !countyComplete(m));
   const cSum = withFig.reduce((s, m) => s + countyTons(m), 0);
   const cLoads = [];
   withFig.forEach(m => monthLoads(m).forEach(l => cLoads.push(l)));
@@ -1332,7 +1451,7 @@ function renderSplit() {
   $("#rcRecon").innerHTML = reconHTML(cSum, catTotals(cLoads), cLogged, "");
   const warn = [];
   if (partial.length) warn.push("Partial months skipped (county figures are monthly): " + partial.map(monthLabel).join(", ") + ".");
-  if (missing.length) warn.push("No county figure entered for " + missing.map(monthLabel).join(", ") + " — add it on the Month tab.");
+  if (missing.length) warn.push("Incomplete county figures for " + missing.map(monthLabel).join(", ") + " — add them on the Month tab.");
   $("#rcWarn").innerHTML = warn.length ? '<span style="color:var(--warn)">' + esc(warn.join(" ")) + '</span>' : "";
 
   let h = '<thead><tr><th>Category</th><th>Trucks</th><th>Loads</th><th>Days</th><th>Avg/load</th><th>Avg/day</th><th>Net tons</th><th>% of tons</th><th>% of loads</th></tr></thead><tbody>';  d.list.forEach(a => {
@@ -1380,7 +1499,7 @@ function renderSplit() {
     const per = catTotals(ls);
     const tot = ls.reduce((s, l) => s + (Number(l.tons) || 0), 0);
     const isWhole = (m + "-01") >= VIEW.from && monthEnd(m) <= VIEW.to;
-    const cty = isWhole ? countyTons(m) : 0;
+    const cty = isWhole && countyComplete(m) ? countyTons(m) : 0;
     mTot += tot; mCounty += cty;
     cl.forEach(a => { if (cty) mCat[a.cat.id] = (mCat[a.cat.id] || 0) + (per[a.cat.id] || 0); });
     const unacc = cty ? cty - tot : 0;
@@ -1433,7 +1552,7 @@ $("#rCsv").onclick = () => {
       rows.push([c.name].concat(fL2.map(f => n2(ft[f.id] || 0))));
     });
   }
-  const whole = monthsBetween(VIEW.from, VIEW.to).filter(m => (m + "-01") >= VIEW.from && monthEnd(m) <= VIEW.to && countyTons(m) > 0);
+  const whole = monthsBetween(VIEW.from, VIEW.to).filter(m => (m + "-01") >= VIEW.from && monthEnd(m) <= VIEW.to && countyComplete(m));
   if (whole.length) {
     const cl = cats();
     rows.push([]);
@@ -1494,10 +1613,58 @@ function renderReport() {
   const cShown = cl.filter(c => catT[c.id]);
   const fShown = fl.filter(f => facT[f.id]);
 
+  $("#repScope").textContent = coLabel();
   $("#repStats").innerHTML =
     stat("Total", n2(tons), "tons") + stat("Loads", loads.length) +
     stat("Days with loads", days) +
     stat("Truck types", cShown.length) + stat("Facilities", fShown.length);
+
+  // county card — only meaningful when viewing both
+  const coCard = $("#repCoCard");
+  if (coFilter()) { coCard.style.display = "none"; }
+  else {
+    coCard.style.display = "";
+    const allL = rangeLoadsAll(VIEW.rFrom, VIEW.rTo);
+    const cT = coTotals(allL), aTons = allL.reduce((x, l) => x + (Number(l.tons) || 0), 0);
+    const cList = cos().concat([{ id: "", name: "Unassigned county", short: "Unassigned" }]).filter(c => cT[c.id]);
+    const COCOL = ["#6fa8dc", "#c98bdb", "#8fce6b", "#d9c46a"];
+    $("#repCoBar").innerHTML = aTons
+      ? cList.map((c, i) => { const p = cT[c.id] / aTons * 100;
+          return '<div style="flex:' + p + ' 1 0;background:' + (c.id ? COCOL[i % COCOL.length] : "#26383a") + '" title="' + esc(c.name) + ' ' + n2(cT[c.id]) + ' t">' + (p >= 9 ? n1(p) + "%" : "") + '</div>'; }).join("")
+      : '<div style="flex:1;background:var(--panel2);color:var(--dim2);font-size:12px">No loads in this range</div>';
+    $("#repCoKey").innerHTML = cList.length
+      ? cList.map((c, i) => '<span class="k"><i class="swatch" style="background:' + (c.id ? COCOL[i % COCOL.length] : "#26383a") + '"></i>' + esc(c.name) +
+          ' <b>' + n2(cT[c.id]) + ' t</b> · <b>' + pct(cT[c.id], aTons) + '</b></span>').join("")
+      : '<span class="k muted">Nothing recorded in this range.</span>';
+
+    // county x type x facility summary
+    let ch = '<thead><tr><th>County</th>' + cats().map(c => '<th>' + esc(c.name) + '</th>').join("") +
+      facs().map(f => '<th>' + esc(f.short || f.name) + '</th>').join("") + '<th>Total</th><th>%</th></tr></thead><tbody>';
+    cList.forEach(c => {
+      const sub = allL.filter(l => (l.coId || "") === c.id);
+      const byCat = {}, byFac = {};
+      sub.forEach(l => {
+        const t = DB.trucks[l.truckId], cid = t && DB.cats[t.catId] ? t.catId : "";
+        byCat[cid] = (byCat[cid] || 0) + (Number(l.tons) || 0);
+        byFac[l.facId || ""] = (byFac[l.facId || ""] || 0) + (Number(l.tons) || 0);
+      });
+      ch += '<tr><td>' + esc(c.name) + '</td>' +
+        cats().map(x => '<td>' + (byCat[x.id] ? n2(byCat[x.id]) : "—") + '</td>').join("") +
+        facs().map(f => '<td>' + (byFac[f.id] ? n2(byFac[f.id]) : "—") + '</td>').join("") +
+        '<td>' + n2(cT[c.id]) + '</td><td>' + pct(cT[c.id], aTons) + '</td></tr>';
+    });
+    const gCat = {}, gFac = {};
+    allL.forEach(l => {
+      const t = DB.trucks[l.truckId], cid = t && DB.cats[t.catId] ? t.catId : "";
+      gCat[cid] = (gCat[cid] || 0) + (Number(l.tons) || 0);
+      gFac[l.facId || ""] = (gFac[l.facId || ""] || 0) + (Number(l.tons) || 0);
+    });
+    ch += '<tr class="total"><td>Both counties</td>' +
+      cats().map(x => '<td>' + n2(gCat[x.id] || 0) + '</td>').join("") +
+      facs().map(f => '<td>' + n2(gFac[f.id] || 0) + '</td>').join("") +
+      '<td>' + n2(aTons) + '</td><td>100.0%</td></tr></tbody>';
+    $("#repCoTable").innerHTML = cList.length ? ch : '<tbody><tr><td class="empty">No loads in this range.</td></tr></tbody>';
+  }
 
   // type bar
   $("#repCatBar").innerHTML = tons
@@ -1590,7 +1757,7 @@ $("#repCsv").onclick = () => {
     catT[cid] = (catT[cid] || 0) + v; facT[fid] = (facT[fid] || 0) + v;
   });
   const cS = cl.filter(c => catT[c.id]), fS = fl.filter(f => facT[f.id]);
-  const rows = [["Truck type by facility"], ["Range", VIEW.rFrom + " to " + VIEW.rTo], []];
+  const rows = [["Truck type by facility"], ["Scope", coLabel()], ["Range", VIEW.rFrom + " to " + VIEW.rTo], []];
   rows.push(["Truck type"].concat(fS.map(f => f.name + " tons")).concat(["Total tons", "Pct of all"]));
   cS.forEach(c => rows.push([c.name].concat(fS.map(f => n2((grid[c.id] || {})[f.id] || 0))).concat([n2(catT[c.id]), n1(catT[c.id] / tons * 100) + "%"])));
   rows.push(["TOTAL"].concat(fS.map(f => n2(facT[f.id]))).concat([n2(tons), "100%"]));
@@ -1606,7 +1773,24 @@ $("#repCsv").onclick = () => {
     const g = tg[t.id]; if (!g) return;
     rows.push([t.unit, catOf(t).name].concat(fS.map(f => n2(g.fac[f.id] || 0))).concat([g.loads, Object.keys(g.days).length, n2(g.tons)]));
   });
-  dl(new Blob([toCSV(rows)], { type: "text/csv" }), "tonnage-type-by-facility-" + VIEW.rFrom + "_to_" + VIEW.rTo + ".csv");
+  if (!coFilter()) {
+    const allL = rangeLoadsAll(VIEW.rFrom, VIEW.rTo);
+    const cT = coTotals(allL), aT = allL.reduce((x, l) => x + (Number(l.tons) || 0), 0);
+    rows.push([]);
+    rows.push(["By county"]);
+    rows.push(["County"].concat(cats().map(c => c.name)).concat(facs().map(f => f.name)).concat(["Total", "Pct"]));
+    cos().concat([{ id: "", name: "Unassigned county" }]).filter(c => cT[c.id]).forEach(c => {
+      const sub = allL.filter(l => (l.coId || "") === c.id);
+      const bc = {}, bf = {};
+      sub.forEach(l => {
+        const t = DB.trucks[l.truckId], cid = t && DB.cats[t.catId] ? t.catId : "";
+        bc[cid] = (bc[cid] || 0) + (Number(l.tons) || 0);
+        bf[l.facId || ""] = (bf[l.facId || ""] || 0) + (Number(l.tons) || 0);
+      });
+      rows.push([c.name].concat(cats().map(x => n2(bc[x.id] || 0))).concat(facs().map(f => n2(bf[f.id] || 0))).concat([n2(cT[c.id]), n1(cT[c.id] / aT * 100) + "%"]));
+    });
+  }
+  dl(new Blob([toCSV(rows)], { type: "text/csv" }), "tonnage-type-by-facility-" + (coFilter() ? DB.cos[coFilter()].short.replace(/\s+/g, "") + "-" : "") + VIEW.rFrom + "_to_" + VIEW.rTo + ".csv");
 };
 
 /* ============================================================
@@ -1648,6 +1832,7 @@ function summarize(m) {
 function renderMonth() {
   const m = VIEW.month;
   $("#mPickTxt").textContent = monthLabel(m);
+  $("#mScope").textContent = coLabel();
   const s = summarize(m);
   $("#mStats").innerHTML =
     stat("Total", n2(s.totalTons), "tons") + stat("Loads", s.totalLoads) +
@@ -1679,13 +1864,49 @@ function renderMonth() {
     : '<div class="empty">Every active truck has a load on every weekday so far this month.</div>';
 
   // county reconciliation
-  const rec = countyRec(m);
   $("#cMonthLbl").textContent = monthLabel(m);
-  $("#cTons").value = rec ? rec.tons : "";
-  $("#cNote").value = rec ? (rec.note || "") : "";
-  $("#cMeta").textContent = rec
-    ? "Saved " + new Date(rec.ts).toLocaleDateString() + (rec.note ? " · " + rec.note : "")
-    : "Nothing recorded for " + monthLabel(m) + " yet.";
+  $("#cScope").textContent = coLabel();
+  const filt = coFilter();
+
+  if (filt) {
+    // one county in view: single entry field
+    $("#cSingle").style.display = "";
+    $("#cEntry").innerHTML = "";
+    const rec = countyRec(m, filt);
+    $("#cTons").value = rec ? rec.tons : "";
+    $("#cNote").value = rec ? (rec.note || "") : "";
+    $("#cMeta").textContent = rec
+      ? "Saved " + new Date(rec.ts).toLocaleDateString() + (rec.by ? " by " + rec.by : "") + (rec.note ? " · " + rec.note : "")
+      : "Nothing recorded for " + DB.cos[filt].name + " in " + monthLabel(m) + " yet.";
+  } else {
+    // both counties: a row per county so each figure is entered separately
+    $("#cSingle").style.display = "none";
+    $("#cEntry").innerHTML = '<div class="list">' + cos().map(c => {
+      const r = countyRec(m, c.id);
+      return '<div class="item"><span class="tag" style="min-width:110px">' + esc(c.name) + '</span>' +
+        '<input type="number" step="0.01" inputmode="decimal" value="' + (r ? r.tons : "") + '" placeholder="0.00" data-cot="' + c.id + '" style="width:120px">' +
+        '<input class="grow" value="' + esc(r ? (r.note || "") : "") + '" placeholder="note" data-con2="' + c.id + '">' +
+        '<button class="btn sm pri" data-cosave="' + c.id + '">Save</button>' +
+        (r ? '<button class="btn sm danger" data-coclr="' + c.id + '">Clear</button>' : "") + '</div>';
+    }).join("") + '</div>';
+    $$("#cEntry [data-cosave]").forEach(b => b.onclick = () => {
+      const id = b.dataset.cosave;
+      const v = parseFloat($('[data-cot="' + id + '"]').value);
+      if (!isFinite(v) || v <= 0) return toast("Enter the tons " + DB.cos[id].name + " reported", true);
+      saveCounty(m, v, $('[data-con2="' + id + '"]').value.trim(), id);
+      renderMonth(); renderSplit(); toast(DB.cos[id].short + " total saved");
+    });
+    $$("#cEntry [data-coclr]").forEach(b => b.onclick = () => {
+      const id = b.dataset.coclr;
+      if (!confirm("Remove the " + DB.cos[id].name + " figure for " + monthLabel(m) + "?")) return;
+      saveCounty(m, 0, "", id); renderMonth(); renderSplit();
+    });
+    const miss = countyMissing(m);
+    $("#cMeta").innerHTML = miss.length
+      ? '<span style="color:var(--warn)">Still waiting on: ' + esc(miss.join(", ")) + '. The comparison below only counts what has been entered.</span>'
+      : "Both counties reported for " + monthLabel(m) + ".";
+  }
+
   const ct = {};
   s.groups.forEach(g => ct[g.cat.id] = g.tons);
   $("#cRecon").innerHTML = reconHTML(countyTons(m), ct, s.totalTons, monthLabel(m));
@@ -1693,13 +1914,13 @@ function renderMonth() {
 $("#cSave").onclick = () => {
   const v = parseFloat($("#cTons").value);
   if (!isFinite(v) || v <= 0) return toast("Enter the tons the county reported", true);
-  saveCounty(VIEW.month, v, $("#cNote").value.trim());
-  renderMonth(); renderSplit(); toast("County total saved for " + monthLabel(VIEW.month));
+  saveCounty(VIEW.month, v, $("#cNote").value.trim(), coFilter());
+  renderMonth(); renderSplit(); toast("Total saved for " + coLabel() + " · " + monthLabel(VIEW.month));
 };
 $("#cClear").onclick = () => {
   if (!countyRec(VIEW.month)) return;
-  if (!confirm("Remove the county figure for " + monthLabel(VIEW.month) + "?")) return;
-  saveCounty(VIEW.month, 0); renderMonth(); renderSplit(); toast("County figure removed");
+  if (!confirm("Remove the figure for " + coLabel() + " in " + monthLabel(VIEW.month) + "?")) return;
+  saveCounty(VIEW.month, 0, "", coFilter()); renderMonth(); renderSplit(); toast("Figure removed");
 };
 $("#mPick").onclick = () => openCal($("#mPick"), VIEW.month, v => { VIEW.month = v; ensureMonth(v).then(renderMonth); }, { mode: "month" });
 $("#mPrev").onclick = () => { VIEW.month = shiftMonth(VIEW.month, -1); ensureMonth(VIEW.month).then(renderMonth); };
@@ -1798,6 +2019,14 @@ function renderFleet() {
     '<button class="btn sm danger" data-tx="' + t.id + '">Delete</button></div>').join("")
     : '<div class="empty">No trucks yet. Add your Roto-Pacs and rear loaders below.</div>';
 
+  const cl2 = cos();
+  $("#coList").innerHTML = cl2.length ? cl2.map(c =>
+    '<div class="item"><input class="grow" value="' + esc(c.name) + '" data-con="' + c.id + '">' +
+    '<input value="' + esc(c.short || "") + '" data-cos="' + c.id + '" style="width:120px" placeholder="label">' +
+    '<span class="muted" style="font-size:11px">' + n1(COTOT[c.id] || 0) + ' t MTD</span>' +
+    (cl2.length > 1 ? '<button class="btn sm danger" data-cox="' + c.id + '">Delete</button>' : "") + '</div>').join("")
+    : '<div class="empty">No counties yet.</div>';
+
   const fs = facs();
   $("#facList").innerHTML = fs.length ? fs.map(f =>
     '<div class="item"><input class="grow" value="' + esc(f.name) + '" data-fn="' + f.id + '">' +
@@ -1820,6 +2049,14 @@ function renderFleet() {
     if (!confirm("Delete this truck? Past loads stay in the data but lose their label.")) return;
     const id = b.dataset.tx; delete DB.trucks[id]; saveLocal(); push("trucks/" + id, null); renderFleet();
   });
+  $$("[data-con]").forEach(i => i.onchange = () => { const c = DB.cos[i.dataset.con]; c.name = i.value.trim() || c.name; saveCo(c); renderAll(); });
+  $$("[data-cos]").forEach(i => i.onchange = () => { const c = DB.cos[i.dataset.cos]; c.short = i.value.trim() || c.name; saveCo(c); renderAll(); });
+  $$("[data-cox]").forEach(b => b.onclick = () => {
+    const id = b.dataset.cox;
+    if (!confirm("Delete this county? Loads already tagged to it stay in the data but lose their label.")) return;
+    delete DB.cos[id]; if (VIEW.co === id) { VIEW.co = ""; LS.set("tl.co", ""); }
+    saveLocal(); push("cos/" + id, null); bump("fleet"); renderAll();
+  });
   $$("[data-fn]").forEach(i => i.onchange = () => { const f = DB.facs[i.dataset.fn]; f.name = i.value.trim() || f.name; saveFac(f); renderAll(); });
   $$("[data-fs]").forEach(i => i.onchange = () => { const f = DB.facs[i.dataset.fs]; f.short = i.value.trim() || f.name; saveFac(f); renderAll(); });
   $$("[data-fx]").forEach(b => b.onclick = () => {
@@ -1837,6 +2074,12 @@ $("#addTruck").onclick = () => {
   const unit = $("#newUnit").value.trim(); if (!unit) return toast("Enter a unit number", true);
   saveTruck({ id: uid(), unit: unit, label: $("#newLabel").value.trim(), catId: $("#newTruckCat").value, active: true });
   $("#newUnit").value = ""; $("#newLabel").value = ""; renderFleet(); renderDay();
+};
+$("#addCo").onclick = () => {
+  const name = $("#newCoName").value.trim(); if (!name) return toast("Name the county first", true);
+  const short = $("#newCoShort").value.trim() || name.split(/\s+/)[0];
+  saveCo({ id: uid(), name: name, short: short, order: cos().length });
+  $("#newCoName").value = ""; $("#newCoShort").value = ""; renderAll();
 };
 $("#addFac").onclick = () => {
   const name = $("#newFacName").value.trim(); if (!name) return toast("Name the facility first", true);
@@ -1889,6 +2132,7 @@ $("#btnPush").onclick = async () => {
     await fbSend("PUT", "cats", DB.cats); await fbSend("PUT", "trucks", DB.trucks); await fbSend("PUT", "facs", DB.facs || {});
     await fbSend("PUT", "county", DB.county || {});
     await fbSend("PUT", "ideas", DB.ideas || {});
+    await fbSend("PUT", "cos", DB.cos || {});
     for (const m in DB.loads) await fbSend("PUT", "loads/" + m, DB.loads[m]);
     setSync("ok"); toast("Everything pushed up");
   } catch (e) { setSync("err", e.message); toast("Push failed: " + e.message, true); }
@@ -1899,14 +2143,15 @@ $("#btnPull").onclick = async () => {
     const all = await fbGet("");
     if (!all) return toast("Nothing stored in the cloud yet", true);
     DB.cats = all.cats || DB.cats; DB.trucks = all.trucks || {}; DB.facs = all.facs || DB.facs; DB.loads = all.loads || {};
-    DB.county = all.county || {}; DB.ideas = all.ideas || {};
+    DB.county = all.county || {}; DB.ideas = all.ideas || {}; DB.cos = all.cos || DB.cos;
     seedCats(); saveLocal(); renderAll(); toast("Pulled everything down");
   } catch (e) { toast("Pull failed: " + e.message, true); }
 };
 $("#btnBackup").onclick = () => dl(new Blob([JSON.stringify({ cfg: { fleet: CFG.fleet }, db: DB }, null, 2)], { type: "application/json" }), "tonnage-backup-" + isoToday() + ".json");
 $("#btnWipe").onclick = () => {
   if (!confirm("Erase all local trucks and loads from this browser? Cloud data is untouched.")) return;
-  DB = { cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {}, ideas: {} }; PENDING = [];
+  DB = { cats: {}, trucks: {}, sites: {}, loads: {}, county: {}, facs: {}, ideas: {}, cos: {} }; PENDING = [];
+  LS.set("tl.migCo", true);
   LS.set("tl.seedTrucks", false); LS.set("tl.seedFacs", false);
   seedCats(); saveLocal(); renderAll(); toast("Local data erased");
 };
@@ -1954,10 +2199,10 @@ $("#mCsvSum").onclick = () => {
   dl(new Blob([toCSV(rows)], { type: "text/csv" }), "tonnage-summary-" + VIEW.month + ".csv");
 };
 $("#mCsvRaw").onclick = () => {
-  const rows = [["Date", "Unit", "Category", "Facility", "Net tons", "Ticket", "Material", "Entered by"]];
+  const rows = [["Date", "Unit", "Category", "County", "Facility", "Net tons", "Ticket", "Material", "Entered by"]];
   monthLoads(VIEW.month).sort((a, b) => a.date.localeCompare(b.date)).forEach(l => {
     const t = DB.trucks[l.truckId];
-    rows.push([l.date, t ? t.unit : "(deleted)", catOf(t).name, facOf(l).name, n2(l.tons), l.ticket || "", l.material || "", l.by || ""]);
+    rows.push([l.date, t ? t.unit : "(deleted)", catOf(t).name, coOf(l).name, facOf(l).name, n2(l.tons), l.ticket || "", l.material || "", l.by || ""]);
   });
   dl(new Blob([toCSV(rows)], { type: "text/csv" }), "tonnage-loads-" + VIEW.month + ".csv");
 };
@@ -1994,6 +2239,8 @@ $("#btnImport").onclick = () => {
   const cTons = col(["tons", "net tons", "net ton", "tonnage"]), cLbs = col(["lbs", "pounds", "net lbs", "net weight", "weight"]);
   const cTk = col(["ticket", "ticket #", "ticket no"]), cSite = col(["facility", "site", "landfill", "location"]), cMat = col(["material", "waste type", "type"]);
   const byFac = {}; facs().forEach(f => { byFac[f.name.toLowerCase()] = f.id; byFac[(f.short || "").toLowerCase()] = f.id; });
+  const cCo = col(["county", "service county"]);
+  const byCo = {}; cos().forEach(c => { byCo[c.name.toLowerCase()] = c.id; byCo[(c.short || "").toLowerCase()] = c.id; });
   if (cDate < 0 || cTruck < 0 || (cTons < 0 && cLbs < 0)) return toast("Need date, truck and a weight column", true);
   const byUnit = {}; trucks(false).forEach(t => byUnit[String(t.unit).trim().toLowerCase()] = t);
   let added = 0; const unknown = {};
@@ -2008,6 +2255,7 @@ $("#btnImport").onclick = () => {
     const fid = byFac[sTxt.toLowerCase()] || "";
     saveLoad({ id: uid(), date: date, truckId: t.id, tons: Math.round(tons * 1000) / 1000,
       ticket: cTk >= 0 ? String(r[cTk] || "").trim() : "", facId: fid, site: fid ? DB.facs[fid].name : sTxt,
+      coId: (cCo >= 0 ? byCo[String(r[cCo] || "").trim().toLowerCase()] : "") || defaultCoId(),
       material: cMat >= 0 ? String(r[cMat] || "").trim() : "", ts: Date.now(), by: deviceName() });
     added++;
   }
@@ -2028,12 +2276,36 @@ function seedCats() {
     SEED_FACS.forEach(f => DB.facs[f.id] = Object.assign({}, f));
     LS.set("tl.seedFacs", true); changed = true;
   }
+  DB.cos = DB.cos || {};
+  SEED_COS.forEach(c => { if (!DB.cos[c.id]) { DB.cos[c.id] = Object.assign({}, c); changed = true; } });
+  if (migrateToBecker()) changed = true;
   if (!Object.keys(DB.trucks).length && !LS.get("tl.seedTrucks", false)) {
     SEED_TRUCKS.forEach(t => DB.trucks[t.id] = Object.assign({}, t));
     LS.set("tl.seedTrucks", true); changed = true;
   }
   if (changed) saveLocal();
   return changed;
+}
+/* Everything logged before counties existed came from Becker County.
+   Tag it once, and move the old flat delivered figures under Becker too. */
+function migrateToBecker() {
+  if (LS.get("tl.migCo", false)) return false;
+  let touched = false;
+  Object.keys(DB.loads || {}).forEach(m => {
+    Object.keys(DB.loads[m] || {}).forEach(id => {
+      const l = DB.loads[m][id];
+      if (l && !l.coId) { l.coId = "becker"; touched = true; }
+    });
+  });
+  const cty = DB.county || {};
+  const flat = Object.keys(cty).filter(k => /^\d{4}-\d{2}$/.test(k));
+  if (flat.length) {
+    cty.becker = cty.becker || {};
+    flat.forEach(k => { cty.becker[k] = Object.assign({}, cty[k], { coId: "becker" }); delete cty[k]; });
+    DB.county = cty; touched = true;
+  }
+  LS.set("tl.migCo", true);
+  return touched;
 }
 /* push a freshly seeded fleet to the cloud so other devices inherit it */
 async function pushSeed() {
@@ -2042,6 +2314,7 @@ async function pushSeed() {
     await fbSend("PUT", "cats", DB.cats);
     await fbSend("PUT", "trucks", DB.trucks);
     await fbSend("PUT", "facs", DB.facs);
+    await fbSend("PUT", "cos", DB.cos);
     bump("fleet");
   } catch (e) { }
 }
@@ -2051,7 +2324,7 @@ async function ensureMonth(m, force) {
   try { const v = await fbGet("loads/" + m); DB.loads[m] = v || {}; saveLocal(); setSync("ok"); }
   catch (e) { setSync("err", e.message); }
 }
-function renderAll() { renderDay(); renderSplit(); renderReport(); renderMonth(); renderFleet(); renderTrend(); renderCfg(); renderSug(); }
+function renderAll() { calcCoTotals(); renderCoSwitch(); renderDay(); renderSplit(); renderReport(); renderMonth(); renderFleet(); renderTrend(); renderCfg(); renderSug(); }
 
 (async function init() {
   const adopted = adoptHash();
@@ -2066,6 +2339,7 @@ function renderAll() { renderDay(); renderSplit(); renderReport(); renderMonth()
         if (meta.facs) { DB.facs = meta.facs; LS.set("tl.seedFacs", true); }
         DB.county = meta.county || DB.county || {};
         DB.ideas = meta.ideas || DB.ideas || {};
+        if (meta.cos) DB.cos = meta.cos;
         DB.loads = Object.assign({}, DB.loads, meta.loads || {});
         PRESENCE = meta.presence || {};
         if (meta.ctl) { LAST_CHANGE = meta.ctl; if (meta.ctl.build > BUILD) offerUpdate(meta.ctl.build); }
@@ -2080,8 +2354,15 @@ function renderAll() { renderDay(); renderSplit(); renderReport(); renderMonth()
     else {
       const remote = await fbGet("cats").catch(() => null);
       const gap = SEED_CATS.filter(c => !remote || !remote[c.id]);
-      if (gap.length) { try { await fbSend("PUT", "cats", DB.cats); bump("fleet"); } catch (e) { } }
-      else bump("open");
+      const rco = await fbGet("cos").catch(() => null);
+      const gap2 = SEED_COS.filter(c => !rco || !rco[c.id]);
+      if (gap.length || gap2.length) {
+        try {
+          if (gap.length) await fbSend("PUT", "cats", DB.cats);
+          if (gap2.length) await fbSend("PUT", "cos", DB.cos);
+          bump("fleet");
+        } catch (e) { }
+      } else bump("open");
     }
   }
   renderAll();
