@@ -192,6 +192,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
 .facbtn.on{background:var(--acc-d);color:var(--acc)}
 .facbtn.cob.on{background:#2a2438;color:#c98bdb}
 .facbtn.needco{border-bottom:2px solid var(--bad);color:var(--bad)}
+.lockco{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#c98bdb;border:1px solid #3a2f47;border-radius:3px;padding:0 8px;display:inline-flex;align-items:center;height:33px}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
 .facsel:has(.needco){animation:shake .25s}
 .daynav{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -259,7 +260,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
   <button class="btn sm" id="errFix">Fix now</button>
 </div>
 <div class="card" id="fixCard" style="display:none">
-  <h2 style="color:var(--bad)">Loads with no county <span class="spacer"></span><button class="btn sm" id="fixClose">Close</button></h2>
+  <h2 style="color:var(--bad)">Loads needing attention <span class="spacer"></span><button class="btn sm" id="fixClose">Close</button></h2>
   <div class="pad row" id="fixBulk"></div>
   <div id="fixList"></div>
 </div>
@@ -688,8 +689,8 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
           {root}/loads/{YYYY-MM}/{id}  {root}/ctl  {root}/presence/{dev}
    ============================================================ */
 
-const BUILD = /*BUILD*/ 11;
-const BUILD_NOTES = "Untagged loads are an error, never auto-assigned";
+const BUILD = /*BUILD*/ 12;
+const BUILD_NOTES = "Roll Off category, county restrictions per truck type";
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -703,7 +704,8 @@ const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","
 const SEED_CATS = [
   { id: "rotopac",  name: "Roto-Pac",  color: "#5fd3a4", order: 0 },
   { id: "rearload", name: "Rear Load", color: "#6fa8dc", order: 1 },
-  { id: "sideload", name: "Side Load", color: "#e0a458", order: 2 }
+  { id: "sideload", name: "Side Load", color: "#e0a458", order: 2 },
+  { id: "rolloff",  name: "Roll Off",  color: "#c98bdb", order: 3, onlyCo: "becker" }
 ];
 const SEED_TRUCKS = [
   { id: "t_twisted",     unit: "Twisted Sister",  label: "", catId: "rotopac",  active: true },
@@ -1071,6 +1073,39 @@ function facTotals(loads) {
   return out;
 }
 function catOf(t) { return (t && DB.cats[t.catId]) || { id: "", name: "Unassigned", color: "#546566" }; }
+/* A truck type can be limited to one county — Roll Off runs Becker only,
+   since Otter Tail bills those customers directly. */
+function catOnlyCo(catId) {
+  const c = DB.cats[catId];
+  return (c && c.onlyCo && DB.cos[c.onlyCo]) ? c.onlyCo : "";
+}
+function truckOnlyCo(t) { return t ? catOnlyCo(t.catId) : ""; }
+/* counties a given truck may legitimately dump under */
+function allowedCos(t) {
+  const only = truckOnlyCo(t);
+  return only ? cos().filter(c => c.id === only) : cos();
+}
+/* a load whose county contradicts its truck type's restriction */
+function isMismatch(l) {
+  const t = DB.trucks[l.truckId];
+  const only = truckOnlyCo(t);
+  return !!(only && l.coId && l.coId !== only);
+}
+function mismatchCountFor(catId, coId) {
+  let n = 0;
+  Object.keys(DB.loads || {}).forEach(m => Object.keys(DB.loads[m] || {}).forEach(k => {
+    const l = DB.loads[m][k], t = DB.trucks[l.truckId];
+    if (t && t.catId === catId && l.coId && l.coId !== coId) n++;
+  }));
+  return n;
+}
+function mismatchLoads() {
+  const out = [];
+  Object.keys(DB.loads || {}).forEach(m => {
+    Object.keys(DB.loads[m] || {}).forEach(k => { const l = DB.loads[m][k]; if (isMismatch(l)) out.push(l); });
+  });
+  return out.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+}
 function allMonthLoads(m) { return Object.values(DB.loads[m] || {}); }
 function monthLoads(m) { return allMonthLoads(m).filter(inCo); }
 function dayLoads(d) { return allMonthLoads(d.slice(0, 7)).filter(l => l.date === d); }
@@ -1328,21 +1363,27 @@ function renderRecover() {
    Untagged loads — surfaced as an error, fixed explicitly
    ============================================================ */
 function renderErr() {
-  const orph = orphanLoads();
+  const orph = orphanLoads(), mis = mismatchLoads();
   const bar = $("#errBar");
-  if (!orph.length) {
+  if (!orph.length && !mis.length) {
     bar.classList.remove("show");
     $("#fixCard").style.display = "none";
     return;
   }
-  const tons = orph.reduce((s, l) => s + (Number(l.tons) || 0), 0);
+  const parts = [];
+  if (orph.length) {
+    const tons = orph.reduce((s, l) => s + (Number(l.tons) || 0), 0);
+    parts.push('<b>' + orph.length + ' load' + (orph.length === 1 ? "" : "s") + '</b> (' + n2(tons) +
+      ' tons) have no county assigned and are excluded from every county report.');
+  }
+  if (mis.length) parts.push('<b>' + mis.length + ' load' + (mis.length === 1 ? "" : "s") +
+    '</b> sit in a county their truck type does not run in.');
   bar.classList.add("show");
-  $("#errTxt").innerHTML = '<b>' + orph.length + ' load' + (orph.length === 1 ? "" : "s") + '</b> (' + n2(tons) +
-    ' tons) have no county assigned. They are excluded from every county report until you set one.';
+  $("#errTxt").innerHTML = parts.join(" ");
   if ($("#fixCard").style.display !== "none") renderFix();
 }
 function renderFix() {
-  const orph = orphanLoads();
+  const orph = orphanLoads().concat(mismatchLoads());
   if (!orph.length) { $("#fixCard").style.display = "none"; renderErr(); return; }
   $("#fixBulk").innerHTML = '<span class="hint">Assign all ' + orph.length + ' to:</span>' +
     cos().map(c => '<button class="btn sm" data-bulk="' + c.id + '">' + esc(c.name) + '</button>').join("") +
@@ -1352,8 +1393,10 @@ function renderFix() {
     return '<div class="item"><span class="muted" style="min-width:92px">' + esc(l.date) + '</span>' +
       '<span style="min-width:120px">' + esc(t ? t.unit : "(deleted truck)") + '</span>' +
       '<span class="num" style="min-width:64px">' + n2(l.tons) + ' t</span>' +
-      '<span class="muted grow" style="font-size:11px">' + esc(facOf(l).short || "") + (l.ticket ? " · #" + esc(l.ticket) : "") + '</span>' +
-      cos().map(c => '<button class="btn sm" data-one="' + l.id + '" data-oco="' + c.id + '" data-om="' + l.date.slice(0, 7) + '">' + esc(c.short || c.name) + '</button>').join("") +
+      '<span class="muted grow" style="font-size:11px">' + esc(facOf(l).short || "") + (l.ticket ? " · #" + esc(l.ticket) : "") +
+        (isMismatch(l) ? ' <span class="orphan">' + esc(catOf(t).name) + ' logged in ' + esc(coOf(l).short) + '</span>' : "") + '</span>' +
+      (truckOnlyCo(t) ? cos().filter(c => c.id === truckOnlyCo(t)) : cos())
+        .map(c => '<button class="btn sm" data-one="' + l.id + '" data-oco="' + c.id + '" data-om="' + l.date.slice(0, 7) + '">' + esc(c.short || c.name) + '</button>').join("") +
       '</div>';
   }).join("") + '</div>' +
   (orph.length > 60 ? '<div class="pad hint">Showing the first 60. Use the bulk buttons above for the rest.</div>' : "");
@@ -1500,7 +1543,13 @@ function renderDay() {
     stat("Trucks reporting", Object.keys(byTruck).length + " / " + trucks(true).length) +
     stat("Avg per load", loads.length ? n2(tot / loads.length) : "—", "t");
 
-  const list = $("#dayList"), ts = trucks(true);
+  const filt = coFilter();
+  const ts = trucks(true).filter(t => {
+    const only = truckOnlyCo(t);
+    if (!only || !filt || filt === "__none") return true;
+    return only === filt;
+  });
+  const list = $("#dayList");
   if (!ts.length) {
     const stored = storedCounts();
     list.innerHTML = stored.loads
@@ -1524,10 +1573,11 @@ function renderDay() {
         '<span class="ticket" style="border-left-color:' + esc(c.color) + '" title="' + esc(l.by ? "entered by " + l.by : "") + (l.ts ? " " + new Date(l.ts).toLocaleString() : "") + '">' + n2(l.tons) +
         '<span class="meta">' + [isOrphan(l) ? '<span class="orphan">NO COUNTY</span>' : (coFilter() && coFilter() !== "__none" ? "" : esc(coOf(l).short || "")), esc(facOf(l).short || ""), l.ticket ? "#" + esc(l.ticket) : "", esc(l.material || ""), l.by && l.by !== deviceName() ? esc(l.by) : ""].filter(Boolean).join(" · ") + '</span>' +
         '<button data-del="' + l.id + '" title="Remove load">&times;</button></span>').join("") + '</div>' : "") +
-      '<div class="addline" data-fac="' + esc(defaultFacId()) + '" data-co="' + esc(entryCoId()) + '">' +
+      '<div class="addline" data-fac="' + esc(defaultFacId()) + '" data-co="' + esc(entryCoId(t)) + '">' +
       '<input class="t" type="number" step="0.01" inputmode="decimal" placeholder="' + (CFG.unit === "lb" ? "lbs" : "tons") + '" data-f="tons">' +
       '<input class="tk" placeholder="ticket #" data-f="ticket">' +
-      '<span class="facsel">' + cos().map(c => '<button type="button" class="facbtn cob' + (c.id === entryCoId() ? " on" : "") + '" data-coid="' + c.id + '">' + esc(c.short || c.name) + '</button>').join("") + '</span>' +
+      '<span class="facsel">' + allowedCos(t).map(c => '<button type="button" class="facbtn cob' + (c.id === entryCoId(t) ? " on" : "") + '" data-coid="' + c.id + '">' + esc(c.short || c.name) + '</button>').join("") + '</span>' +
+      (truckOnlyCo(t) ? '<span class="lockco" title="This truck type runs in one county only">' + esc((DB.cos[truckOnlyCo(t)] || {}).short || "") + ' only</span>' : "") +
       '<span class="facsel">' + facs().map(f => '<button type="button" class="facbtn' + (f.id === defaultFacId() ? " on" : "") + '" data-fid="' + f.id + '">' + esc(f.short || f.name) + '</button>').join("") + '</span>' +
       '<select data-f="material"><option value="MSW">MSW</option><option value="Recycle">Recycle</option><option value="C&D">C&amp;D</option><option value="Demo">Demo</option><option value="Yard">Yard</option><option value="Other">Other</option></select>' +
       '<button class="btn sm pri" data-add="' + t.id + '">Add load</button></div></div>';
@@ -1562,7 +1612,9 @@ function renderDay() {
 }
 /* new loads follow the active county filter, or the last one explicitly chosen.
    With neither, the entry row starts blank and refuses to save. */
-function entryCoId() {
+function entryCoId(t) {
+  const only = truckOnlyCo(t);
+  if (only) return only;                 // restricted types have exactly one valid answer
   const f = coFilter();
   if (f && f !== "__none") return f;
   return defaultCoId();
@@ -1576,7 +1628,10 @@ function addFromRow(row) {
   const facId = line ? (line.dataset.fac || defaultFacId()) : defaultFacId();
   if (!facId) return toast("Add a dumping facility under Fleet first", true);
   const fac = DB.facs[facId] || {};
-  const coId = line ? (line.dataset.co || entryCoId()) : entryCoId();
+  const truck = DB.trucks[id];
+  const only = truckOnlyCo(truck);
+  let coId = line ? (line.dataset.co || entryCoId(truck)) : entryCoId(truck);
+  if (only) coId = only;
   if (!coId || !DB.cos[coId]) {
     if (line) $$("[data-coid]", line).forEach(x => x.classList.add("needco"));
     return toast("Pick a county for this load first", true);
@@ -2482,6 +2537,8 @@ function renderFleet() {
     '<div class="item"><input type="color" value="' + esc(c.color) + '" data-cc="' + c.id + '" style="width:36px;padding:2px">' +
     '<input class="grow" value="' + esc(c.name) + '" data-cn="' + c.id + '">' +
     '<span class="muted" style="font-size:11px">' + trucks(false).filter(t => t.catId === c.id).length + ' trucks</span>' +
+    '<select data-conly="' + c.id + '" title="Limit this type to one county"><option value="">All counties</option>' +
+      cos().map(x => '<option value="' + x.id + '"' + (c.onlyCo === x.id ? " selected" : "") + '>' + esc(x.name) + ' only</option>').join("") + '</select>' +
     (cs.length > 1 ? '<button class="btn sm danger" data-cx="' + c.id + '">Delete</button>' : "") + '</div>').join("");
 
   $("#newTruckCat").innerHTML = cs.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join("");
@@ -2510,6 +2567,14 @@ function renderFleet() {
     (fs.length > 1 ? '<button class="btn sm danger" data-fx="' + f.id + '">Delete</button>' : "") + '</div>').join("")
     : '<div class="empty">No facilities yet. Add at least one so loads can be tagged.</div>';
 
+  $$("[data-conly]").forEach(i => i.onchange = () => {
+    const c = DB.cats[i.dataset.conly], val = i.value;
+    if (val) {
+      const bad = mismatchCountFor(c.id, val);
+      if (bad && !confirm(bad + " existing load(s) of this type are in another county.\nLimiting it will flag them as errors for you to fix. Continue?")) { renderFleet(); return; }
+    }
+    c.onlyCo = val; saveCat(c); renderAll();
+  });
   $$("[data-cn]").forEach(i => i.onchange = () => { const c = DB.cats[i.dataset.cn]; c.name = i.value.trim() || c.name; saveCat(c); renderAll(); });
   $$("[data-cc]").forEach(i => i.onchange = () => { const c = DB.cats[i.dataset.cc]; c.color = i.value; saveCat(c); renderAll(); });
   $$("[data-cx]").forEach(b => b.onclick = () => {
