@@ -7,7 +7,7 @@
    when the network fails. Firebase traffic is never cached — stale tonnage
    numbers would be worse than none. */
 
-const CACHE = "tonnage-shell-v1";
+const CACHE = "tonnage-log-shell-v17";
 const SHELL = ["./", "./index.html"];
 
 self.addEventListener("install", e => {
