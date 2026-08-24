@@ -711,8 +711,8 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
           {root}/loads/{YYYY-MM}/{id}  {root}/ctl  {root}/presence/{dev}
    ============================================================ */
 
-const BUILD = /*BUILD*/ 18;
-const BUILD_NOTES = "Distinct facility colors, unpriced-tons drill-down";
+const BUILD = /*BUILD*/ 19;
+const BUILD_NOTES = "Fix: unpriced drill-down now matches the warning";
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -2393,12 +2393,14 @@ function renderCost() {
   if (res.prev.priced && res.cur.priced) dh += mk("prev", "cur", "Current vs previous", annual(res.cur.cost - res.prev.cost));
   if (res.cur.priced && res.prop.priced) dh += mk("cur", "prop", "Proposed vs current", annual(res.prop.cost - res.cur.cost));
   if (res.prev.priced && res.prop.priced && res.cur.priced) dh += mk("prev", "prop", "Proposed vs previous", annual(res.prop.cost - res.prev.cost));
-  const unp = res.cur.unpriced || res.prop.unpriced || res.prev.unpriced;
+  const affected = SCEN.filter(x => res[x.k].unpriced > 0);
+  const unp = affected.length ? Math.max.apply(null, affected.map(x => res[x.k].unpriced)) : 0;
   $("#costDelta").innerHTML = (dh ? '<div class="delta">' + dh + '</div>' : "") +
     (!hasRates("cur") && !hasRates("prop") && !hasRates("prev")
       ? '<div class="empty">Enter at least one rate above to see costs.</div>' : "") +
-    (unp ? '<div class="pad"><div class="row"><span style="color:var(--warn);font-size:12px">&#9888; ' + n2(unp) +
-      ' tons are excluded &mdash; no rate entered for where they went.</span>' +
+    (unp ? '<div class="pad"><div class="row"><span style="color:var(--warn);font-size:12px">&#9888; up to ' + n2(unp) +
+      ' tons are excluded from the ' + affected.map(x => x.label.toLowerCase()).join(" and ") +
+      ' figure' + (affected.length > 1 ? "s" : "") + ' &mdash; no rate entered for where they went.</span>' +
       '<button class="btn sm" id="unpShow">Show me</button></div><div id="unpOut"></div></div>' : "");
   if (unp) $("#unpShow").onclick = () => showUnpriced(loads);
 
@@ -2501,22 +2503,32 @@ function showUnpriced(loads) {
     if (!t) return;
     const fid = l.facId && DB.facs[l.facId] ? l.facId : "";
     if (!fid) { noFac.push(l); return; }
+    /* any missing rate matters — a gap in the previous column breaks the
+       comparison just as surely as a gap in the current one */
     const miss = SCEN.filter(x => !rateOf(fid, x.k)).map(x => x.k);
-    if (miss.indexOf("cur") >= 0 || miss.length === SCEN.length) {
-      const g = byFac[fid] || (byFac[fid] = { tons: 0, loads: 0, missing: miss });
-      g.tons += t; g.loads++;
-    }
+    if (!miss.length) return;
+    const g = byFac[fid] || (byFac[fid] = { tons: 0, loads: 0, missing: miss });
+    g.tons += t; g.loads++;
   });
+
+  if (!Object.keys(byFac).length && !noFac.length) {
+    out.innerHTML = '<div class="pad hint" style="padding-left:0;color:var(--acc)">' +
+      'Every facility in this range has all three rates entered. Nothing is being excluded here &mdash; ' +
+      'if a figure still looks low, widen the date range or check the county filter.</div>';
+    return;
+  }
 
   let h = '<div class="list" style="margin-top:10px">';
   Object.keys(byFac).forEach(fid => {
     const g = byFac[fid], f = DB.facs[fid];
+    const first = g.missing[0];
     h += '<div class="item"><span class="tag" style="min-width:150px">' + esc(f.name) + '</span>' +
       '<span class="num" style="min-width:80px">' + n2(g.tons) + ' t</span>' +
       '<span class="muted" style="min-width:70px">' + g.loads + ' loads</span>' +
-      '<span class="grow" style="color:var(--warn);font-size:11px">no ' +
-        esc(g.missing.map(k => SCEN.find(x => x.k === k).label.toLowerCase()).join(" / ")) + ' rate</span>' +
-      '<button class="btn sm pri" data-goRate="' + fid + '">Set rate</button></div>';
+      '<span class="grow" style="color:var(--warn);font-size:11px">missing ' +
+        esc(g.missing.map(k => SCEN.find(x => x.k === k).label.toLowerCase()).join(" + ")) + ' rate' +
+        (g.missing.length > 1 ? "s" : "") + '</span>' +
+      '<button class="btn sm pri" data-gorate="' + fid + '" data-goscen="' + first + '">Set rate</button></div>';
   });
   if (noFac.length) {
     const t = noFac.reduce((s2, l) => s2 + (Number(l.tons) || 0), 0);
@@ -2529,9 +2541,10 @@ function showUnpriced(loads) {
   h += '</div>';
   out.innerHTML = h;
 
-  $$("#unpOut [data-goRate]").forEach(b => b.onclick = () => {
-    const el = $('[data-rate="' + b.dataset.goRate + '"][data-scen="cur"]');
-    if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.focus(); }
+  $$("#unpOut [data-gorate]").forEach(b => b.onclick = () => {
+    const el = $('[data-rate="' + b.dataset.gorate + '"][data-scen="' + b.dataset.goscen + '"]');
+    if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.focus(); el.select && el.select(); }
+    else toast("Open the Cost tab to edit rates", true);
   });
   const fx = $("#unpFixFac");
   if (fx) fx.onclick = () => { renderNoFac(noFac); };
