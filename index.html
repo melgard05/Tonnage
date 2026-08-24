@@ -711,8 +711,8 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
           {root}/loads/{YYYY-MM}/{id}  {root}/ctl  {root}/presence/{dev}
    ============================================================ */
 
-const BUILD = /*BUILD*/ 17;
-const BUILD_NOTES = "Unique app identity, no icon collision with other apps";
+const BUILD = /*BUILD*/ 18;
+const BUILD_NOTES = "Distinct facility colors, unpriced-tons drill-down";
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -2101,7 +2101,9 @@ $("#rCsv").onclick = () => {
 /* ============================================================
    REPORT — truck type x facility
    ============================================================ */
-const FACCOL = ["#e0a458", "#c98bdb", "#6ecbd0", "#8fce6b", "#d9c46a"];
+/* Facilities use cool tones only. Truck-type colors are green / blue / amber /
+   purple, so no bar on the Report tab can be mistaken for the chart above it. */
+const FACCOL = ["#3f7d8c", "#8a6fa8", "#5b8f6a", "#a87f5b", "#6b7d95"];
 function facColor(i, id) { return id ? FACCOL[i % FACCOL.length] : "#26383a"; }
 
 function renderReport() {
@@ -2395,7 +2397,10 @@ function renderCost() {
   $("#costDelta").innerHTML = (dh ? '<div class="delta">' + dh + '</div>' : "") +
     (!hasRates("cur") && !hasRates("prop") && !hasRates("prev")
       ? '<div class="empty">Enter at least one rate above to see costs.</div>' : "") +
-    (unp ? '<div class="pad hint"><span style="color:var(--warn)">' + n2(unp) + ' tons sit at a facility with no rate entered, so they are excluded from every figure above.</span></div>' : "");
+    (unp ? '<div class="pad"><div class="row"><span style="color:var(--warn);font-size:12px">&#9888; ' + n2(unp) +
+      ' tons are excluded &mdash; no rate entered for where they went.</span>' +
+      '<button class="btn sm" id="unpShow">Show me</button></div><div id="unpOut"></div></div>' : "");
+  if (unp) $("#unpShow").onclick = () => showUnpriced(loads);
 
   // by facility
   const fl = facs().concat([{ id: "", name: "Unrecorded", short: "Unrecorded" }]);
@@ -2408,7 +2413,9 @@ function renderCost() {
     const st = sub.reduce((x, l) => x + (Number(l.tons) || 0), 0);
     const c = {}; SCEN.forEach(x => c[x.k] = st * rateOf(f.id, x.k));
     const d = (rateOf(f.id, "cur") && rateOf(f.id, "prop")) ? c.prop - c.cur : null;
-    fh += '<tr><td>' + esc(f.name) + '</td><td>' + n2(st) + '</td>' +
+    const noRate = !rateOf(f.id, "cur");
+    fh += '<tr' + (noRate ? ' style="background:#211a12"' : "") + '><td>' + esc(f.name) +
+      (noRate ? ' <span style="color:var(--warn);font-size:10px">NO RATE</span>' : "") + '</td><td>' + n2(st) + '</td>' +
       SCEN.map(x => '<td class="muted">' + (rateOf(f.id, x.k) ? money(rateOf(f.id, x.k)) : "—") + '</td>' +
         '<td>' + (rateOf(f.id, x.k) ? money0(c[x.k]) : "—") + '</td>').join("") +
       '<td style="color:' + (d === null ? "var(--dim2)" : d > 0 ? "var(--bad)" : "var(--acc)") + '">' + (d === null ? "—" : signed(d)) + '</td></tr>';
@@ -2481,6 +2488,88 @@ function renderCost() {
     SCEN.map(x => '<td>' + (res[x.k].priced ? money0(res[x.k].cost) : "—") + '</td>').join("") +
     '<td>' + ((res.cur.priced && res.prop.priced) ? signed(res.prop.cost - res.cur.cost) : "—") + '</td></tr></tbody>';
   $("#costMonthTable").innerHTML = mh;
+}
+/* Breaks the excluded tonnage down by cause so each one can be fixed at source. */
+function showUnpriced(loads) {
+  const out = $("#unpOut");
+  if (out.dataset.open === "1") { out.innerHTML = ""; out.dataset.open = "0"; return; }
+  out.dataset.open = "1";
+
+  const noFac = [], byFac = {};
+  loads.forEach(l => {
+    const t = Number(l.tons) || 0;
+    if (!t) return;
+    const fid = l.facId && DB.facs[l.facId] ? l.facId : "";
+    if (!fid) { noFac.push(l); return; }
+    const miss = SCEN.filter(x => !rateOf(fid, x.k)).map(x => x.k);
+    if (miss.indexOf("cur") >= 0 || miss.length === SCEN.length) {
+      const g = byFac[fid] || (byFac[fid] = { tons: 0, loads: 0, missing: miss });
+      g.tons += t; g.loads++;
+    }
+  });
+
+  let h = '<div class="list" style="margin-top:10px">';
+  Object.keys(byFac).forEach(fid => {
+    const g = byFac[fid], f = DB.facs[fid];
+    h += '<div class="item"><span class="tag" style="min-width:150px">' + esc(f.name) + '</span>' +
+      '<span class="num" style="min-width:80px">' + n2(g.tons) + ' t</span>' +
+      '<span class="muted" style="min-width:70px">' + g.loads + ' loads</span>' +
+      '<span class="grow" style="color:var(--warn);font-size:11px">no ' +
+        esc(g.missing.map(k => SCEN.find(x => x.k === k).label.toLowerCase()).join(" / ")) + ' rate</span>' +
+      '<button class="btn sm pri" data-goRate="' + fid + '">Set rate</button></div>';
+  });
+  if (noFac.length) {
+    const t = noFac.reduce((s2, l) => s2 + (Number(l.tons) || 0), 0);
+    h += '<div class="item"><span class="tag" style="min-width:150px;border-color:var(--bad);color:var(--bad)">No facility recorded</span>' +
+      '<span class="num" style="min-width:80px">' + n2(t) + ' t</span>' +
+      '<span class="muted" style="min-width:70px">' + noFac.length + ' loads</span>' +
+      '<span class="grow muted" style="font-size:11px">these predate the facility toggle, or came from an import</span>' +
+      '<button class="btn sm" id="unpFixFac">Fix loads</button></div>';
+  }
+  h += '</div>';
+  out.innerHTML = h;
+
+  $$("#unpOut [data-goRate]").forEach(b => b.onclick = () => {
+    const el = $('[data-rate="' + b.dataset.goRate + '"][data-scen="cur"]');
+    if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.focus(); }
+  });
+  const fx = $("#unpFixFac");
+  if (fx) fx.onclick = () => { renderNoFac(noFac); };
+}
+/* per-load repair for tons with no facility at all */
+function renderNoFac(list) {
+  const out = $("#unpOut");
+  let h = '<div class="pad hint" style="padding-left:0">Assign a facility to each load, or set them all at once.</div>' +
+    '<div class="row" style="margin-bottom:8px"><span class="hint">All ' + list.length + ' to:</span>' +
+    facs().map(f => '<button class="btn sm" data-nfall="' + f.id + '">' + esc(f.name) + '</button>').join("") + '</div>' +
+    '<div class="list">' + list.slice(0, 50).map(l => {
+      const t = DB.trucks[l.truckId];
+      return '<div class="item"><span class="muted" style="min-width:92px">' + esc(l.date) + '</span>' +
+        '<span style="min-width:140px">' + esc(t ? t.unit : "(deleted)") + '</span>' +
+        '<span class="num" style="min-width:64px">' + n2(l.tons) + ' t</span>' +
+        '<span class="grow muted" style="font-size:11px">' + (l.ticket ? "#" + esc(l.ticket) : "") + '</span>' +
+        facs().map(f => '<button class="btn sm" data-nf="' + l.id + '" data-nff="' + f.id + '" data-nfm="' + l.date.slice(0, 7) + '">' + esc(f.short || f.name) + '</button>').join("") +
+        '</div>';
+    }).join("") + '</div>' +
+    (list.length > 50 ? '<div class="pad hint">Showing 50 of ' + list.length + '. Use the bulk buttons for the rest.</div>' : "");
+  out.innerHTML = h;
+
+  $$("#unpOut [data-nfall]").forEach(b => b.onclick = () => {
+    const fid = b.dataset.nfall;
+    if (!confirm("Set all " + list.length + " loads to " + DB.facs[fid].name + "?")) return;
+    const months = {};
+    list.forEach(l => { l.facId = fid; l.site = DB.facs[fid].name; months[l.date.slice(0, 7)] = 1; });
+    saveLocal();
+    Object.keys(months).forEach(m => { push("loads/" + m, DB.loads[m]); bump("load", m); });
+    renderAll(); toast(list.length + " loads set to " + DB.facs[fid].short);
+  });
+  $$("#unpOut [data-nf]").forEach(b => b.onclick = () => {
+    const m = b.dataset.nfm, l = (DB.loads[m] || {})[b.dataset.nf];
+    if (!l) return;
+    l.facId = b.dataset.nff; l.site = DB.facs[l.facId].name;
+    saveLocal(); push("loads/" + m + "/" + l.id, l); bump("load", m);
+    renderAll();
+  });
 }
 async function ensureCostRange(force) {
   for (const m of monthsBetween(VIEW.cFrom, VIEW.cTo)) { try { await ensureMonth(m, force); } catch (e) { } }
