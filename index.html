@@ -424,7 +424,7 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
   <div class="card">
     <h2>Rates <span class="spacer"></span><span class="muted" style="font-size:11px">dollars per ton, by facility</span></h2>
     <div class="wrap"><table id="rateTable"></table></div>
-    <div class="pad hint">Leave a cell blank if that rate does not apply. Tons dumped at a facility with no rate are counted but shown separately, so a missing number never quietly becomes zero dollars.</div>
+    <div class="pad hint">Leave a whole column blank until you have those numbers &mdash; an empty column is marked "not in use" and never flagged. A column is only flagged when some facilities have a rate and others do not. Tons dumped at a facility with no rate are counted but shown separately, so a missing number never quietly becomes zero dollars.</div>
   </div>
 
   <div class="card">
@@ -711,8 +711,8 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
           {root}/loads/{YYYY-MM}/{id}  {root}/ctl  {root}/presence/{dev}
    ============================================================ */
 
-const BUILD = /*BUILD*/ 19;
-const BUILD_NOTES = "Fix: unpriced drill-down now matches the warning";
+const BUILD = /*BUILD*/ 20;
+const BUILD_NOTES = "Unused rate columns are not errors";
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -1348,6 +1348,11 @@ function saveRate(facId, scen, val) {
   saveLocal(); push("rates/" + facId, r); bump("rates");
 }
 function hasRates(scen) { return facs().some(f => rateOf(f.id, scen) > 0); }
+/* A column with no rates anywhere is not an error — it is a column you have not
+   filled in yet (a proposed rate you will not know until year end, say).
+   Only a partly filled column is a real inconsistency worth flagging. */
+function scenInUse(k) { return hasRates(k); }
+function scenGaps(facId) { return SCEN.filter(x => scenInUse(x.k) && !rateOf(facId, x.k)).map(x => x.k); }
 /* cost of a set of loads under one scenario; untagged or unpriced tons are reported separately */
 function costOf(loads, scen) {
   let cost = 0, priced = 0, unpriced = 0;
@@ -2328,8 +2333,9 @@ $("#repCsv").onclick = () => {
    ============================================================ */
 function renderRates() {
   const fl = facs();
-  let h = '<thead><tr><th>Facility</th>' + SCEN.map(x => '<th>' + x.label + ' $/ton</th>').join("") +
-    '<th>Current vs previous</th><th>Proposed vs current</th></tr></thead><tbody>';
+  let h = '<thead><tr><th>Facility</th>' + SCEN.map(x => '<th>' + x.label + ' $/ton' +
+    (scenInUse(x.k) ? "" : '<div class="muted" style="font-size:9px;letter-spacing:0;text-transform:none">not in use</div>') +
+    '</th>').join("") + '<th>Current vs previous</th><th>Proposed vs current</th></tr></thead><tbody>';
   fl.forEach(f => {
     const prev = rateOf(f.id, "prev"), cur = rateOf(f.id, "cur"), prop = rateOf(f.id, "prop");
     const cell = (base, next) => {
@@ -2373,7 +2379,8 @@ function renderCost() {
 
   $("#costStats").innerHTML =
     stat("Tons in range", n2(tons)) +
-    SCEN.map(x => stat(x.label + " cost", res[x.k].priced ? money0(res[x.k].cost) : "—")).join("") +
+    SCEN.map(x => stat(x.label + " cost", res[x.k].priced ? money0(res[x.k].cost)
+      : (scenInUse(x.k) ? "—" : '<span class="muted" style="font-size:12px">not set yet</span>'))).join("") +
     stat("Blended $/ton", res.cur.priced ? money(res.cur.cost / res.cur.priced) : "—");
 
   // headline deltas
@@ -2393,7 +2400,7 @@ function renderCost() {
   if (res.prev.priced && res.cur.priced) dh += mk("prev", "cur", "Current vs previous", annual(res.cur.cost - res.prev.cost));
   if (res.cur.priced && res.prop.priced) dh += mk("cur", "prop", "Proposed vs current", annual(res.prop.cost - res.cur.cost));
   if (res.prev.priced && res.prop.priced && res.cur.priced) dh += mk("prev", "prop", "Proposed vs previous", annual(res.prop.cost - res.prev.cost));
-  const affected = SCEN.filter(x => res[x.k].unpriced > 0);
+  const affected = SCEN.filter(x => scenInUse(x.k) && res[x.k].unpriced > 0);
   const unp = affected.length ? Math.max.apply(null, affected.map(x => res[x.k].unpriced)) : 0;
   $("#costDelta").innerHTML = (dh ? '<div class="delta">' + dh + '</div>' : "") +
     (!hasRates("cur") && !hasRates("prop") && !hasRates("prev")
@@ -2415,7 +2422,7 @@ function renderCost() {
     const st = sub.reduce((x, l) => x + (Number(l.tons) || 0), 0);
     const c = {}; SCEN.forEach(x => c[x.k] = st * rateOf(f.id, x.k));
     const d = (rateOf(f.id, "cur") && rateOf(f.id, "prop")) ? c.prop - c.cur : null;
-    const noRate = !rateOf(f.id, "cur");
+    const noRate = scenInUse("cur") && !rateOf(f.id, "cur");
     fh += '<tr' + (noRate ? ' style="background:#211a12"' : "") + '><td>' + esc(f.name) +
       (noRate ? ' <span style="color:var(--warn);font-size:10px">NO RATE</span>' : "") + '</td><td>' + n2(st) + '</td>' +
       SCEN.map(x => '<td class="muted">' + (rateOf(f.id, x.k) ? money(rateOf(f.id, x.k)) : "—") + '</td>' +
@@ -2505,16 +2512,19 @@ function showUnpriced(loads) {
     if (!fid) { noFac.push(l); return; }
     /* any missing rate matters — a gap in the previous column breaks the
        comparison just as surely as a gap in the current one */
-    const miss = SCEN.filter(x => !rateOf(fid, x.k)).map(x => x.k);
+    const miss = scenGaps(fid);
     if (!miss.length) return;
     const g = byFac[fid] || (byFac[fid] = { tons: 0, loads: 0, missing: miss });
     g.tons += t; g.loads++;
   });
 
   if (!Object.keys(byFac).length && !noFac.length) {
+    const unused = SCEN.filter(x => !scenInUse(x.k)).map(x => x.label.toLowerCase());
     out.innerHTML = '<div class="pad hint" style="padding-left:0;color:var(--acc)">' +
-      'Every facility in this range has all three rates entered. Nothing is being excluded here &mdash; ' +
-      'if a figure still looks low, widen the date range or check the county filter.</div>';
+      'Every facility has a rate for each column you are using. Nothing is being excluded.' +
+      (unused.length ? '<br><span class="muted">The ' + esc(unused.join(" and ")) +
+        ' column' + (unused.length > 1 ? "s are" : " is") + ' still empty, which is fine &mdash; ' +
+        'those figures simply stay blank until you fill them in.</span>' : "") + '</div>';
     return;
   }
 
