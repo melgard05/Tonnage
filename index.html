@@ -269,7 +269,8 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
   <button class="btn sm" id="errFix">Fix now</button>
 </div>
 <div class="card" id="fixCard" style="display:none">
-  <h2 style="color:var(--bad)">Loads needing attention <span class="spacer"></span><button class="btn sm" id="fixClose">Close</button></h2>
+  <h2 style="color:var(--bad)">Needs attention <span class="spacer"></span><button class="btn sm" id="fixClose">Close</button></h2>
+  <div id="fixCounty"></div>
   <div class="pad row" id="fixBulk"></div>
   <div id="fixList"></div>
 </div>
@@ -711,8 +712,8 @@ tr.total td{border-top:2px solid var(--line2);border-bottom:0;font-size:13px}
           {root}/loads/{YYYY-MM}/{id}  {root}/ctl  {root}/presence/{dev}
    ============================================================ */
 
-const BUILD = /*BUILD*/ 20;
-const BUILD_NOTES = "Unused rate columns are not errors";
+const BUILD = /*BUILD*/ 21;
+const BUILD_NOTES = "Assign pre-county delivered totals, merge duplicate truck types";
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -922,6 +923,7 @@ async function onCtl(ev) {
     else if (c.kind === "fleet") {
       const a = await fbGet("cats"), b = await fbGet("trucks"), f = await fbGet("facs"), g = await fbGet("cos");
       if (a) DB.cats = a; if (b) DB.trucks = b; if (f) DB.facs = f; if (g) DB.cos = g;
+      mergeDuplicateCats();
       seedCats(); saveLocal();
     }
     renderAll();
@@ -1570,10 +1572,52 @@ function renderRecover() {
 /* ============================================================
    Untagged loads — surfaced as an error, fixed explicitly
    ============================================================ */
+/* Delivered totals saved before counties existed sit at county/YYYY-MM instead of
+   county/<county>/YYYY-MM. The app cannot tell which county they belong to, so they
+   are flagged and the user assigns them; nothing is guessed. */
+function legacyCountyMonths() {
+  return Object.keys(DB.county || {}).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+}
+function assignLegacyCounty(coId) {
+  const months = legacyCountyMonths(), skipped = [];
+  DB.county[coId] = DB.county[coId] || {};
+  months.forEach(m => {
+    if (DB.county[coId][m]) { skipped.push(m); return; }   // never overwrite a figure already entered
+    DB.county[coId][m] = Object.assign({}, DB.county[m], { month: m, coId: coId });
+    delete DB.county[m];
+  });
+  saveLocal(); push("county", DB.county); bump("county", months[0] || "");
+  return { moved: months.length - skipped.length, skipped: skipped };
+}
+/* Two truck types with the same name are one type entered twice. Keep the built-in
+   one (or the oldest), move its trucks across, drop the copy. Runs on every device. */
+function mergeDuplicateCats() {
+  const groups = {};
+  Object.values(DB.cats || {}).forEach(c => {
+    const k = String(c.name || "").trim().toLowerCase();
+    (groups[k] = groups[k] || []).push(c);
+  });
+  const seedIds = SEED_CATS.map(c => c.id);
+  let changed = false;
+  Object.values(groups).forEach(g => {
+    if (g.length < 2) return;
+    g.sort((a, b) => (seedIds.indexOf(b.id) >= 0) - (seedIds.indexOf(a.id) >= 0) || String(a.id).localeCompare(String(b.id)));
+    const keep = g[0];
+    g.slice(1).forEach(dup => {
+      Object.values(DB.trucks || {}).forEach(t => { if (t.catId === dup.id) t.catId = keep.id; });
+      if (dup.onlyCo && !keep.onlyCo) keep.onlyCo = dup.onlyCo;
+      delete DB.cats[dup.id];
+      changed = true;
+    });
+  });
+  if (changed) saveLocal();
+  return changed;
+}
+
 function renderErr() {
-  const orph = orphanLoads(), mis = mismatchLoads();
+  const orph = orphanLoads(), mis = mismatchLoads(), leg = legacyCountyMonths();
   const bar = $("#errBar");
-  if (!orph.length && !mis.length) {
+  if (!orph.length && !mis.length && !leg.length) {
     bar.classList.remove("show");
     $("#fixCard").style.display = "none";
     return;
@@ -1586,14 +1630,32 @@ function renderErr() {
   }
   if (mis.length) parts.push('<b>' + mis.length + ' load' + (mis.length === 1 ? "" : "s") +
     '</b> sit in a county their truck type does not run in.');
+  if (leg.length) parts.push('<b>' + leg.length + ' monthly delivered total' + (leg.length === 1 ? "" : "s") +
+    '</b> have no county and are left out of every comparison.');
   bar.classList.add("show");
   $("#errTxt").innerHTML = parts.join(" ");
   if ($("#fixCard").style.display !== "none") renderFix();
 }
 function renderFix() {
-  const orph = orphanLoads().concat(mismatchLoads());
-  if (!orph.length) { $("#fixCard").style.display = "none"; renderErr(); return; }
-  $("#fixBulk").innerHTML = '<span class="hint">Assign all ' + orph.length + ' to:</span>' +
+  const orph = orphanLoads().concat(mismatchLoads()), leg = legacyCountyMonths();
+  if (!orph.length && !leg.length) { $("#fixCard").style.display = "none"; renderErr(); return; }
+  $("#fixCounty").innerHTML = leg.length
+    ? '<div class="pad" style="border-bottom:1px solid var(--line)">' +
+      '<div class="hint" style="margin-bottom:8px">Delivered totals entered before counties existed: ' +
+      leg.map(m => esc(monthLabel(m)) + ' <b>' + n1(Number(DB.county[m].tons) || 0) + ' t</b>').join(" · ") + '</div>' +
+      '<div class="row"><span class="hint">Assign all ' + leg.length + ' to:</span>' +
+      cos().map(c => '<button class="btn sm" data-legco="' + c.id + '">' + esc(c.name) + '</button>').join("") + '</div></div>'
+    : "";
+  $$("#fixCounty [data-legco]").forEach(b => b.onclick = () => {
+    const co = b.dataset.legco;
+    if (!confirm("Assign " + leg.length + " delivered totals to " + DB.cos[co].name + "?")) return;
+    const r = assignLegacyCounty(co);
+    renderAll();
+    toast(r.moved + " totals assigned to " + DB.cos[co].short +
+      (r.skipped.length ? " · " + r.skipped.length + " skipped, " + DB.cos[co].short + " already has a figure for that month" : ""), !!r.skipped.length);
+  });
+  if (!orph.length) { $("#fixBulk").innerHTML = ""; $("#fixList").innerHTML = ""; return; }
+  $("#fixBulk").innerHTML = '<span class="hint">Assign all ' + orph.length + ' loads to:</span>' +
     cos().map(c => '<button class="btn sm" data-bulk="' + c.id + '">' + esc(c.name) + '</button>').join("") +
     '<span class="spacer"></span><button class="btn sm danger" id="fixDel">Delete all</button>';
   $("#fixList").innerHTML = '<div class="list">' + orph.slice(0, 60).map(l => {
@@ -3162,7 +3224,7 @@ function renderAll() { calcCoTotals(); renderErr(); renderCoSwitch(); renderReco
 
 (async function init() {
   const adopted = adoptHash();
-  seedCats();
+  seedCats(); mergeDuplicateCats();
   renderCfg();
   if (syncOn()) {
     try {
@@ -3178,7 +3240,11 @@ function renderAll() { calcCoTotals(); renderErr(); renderCoSwitch(); renderReco
         DB.loads = Object.assign({}, DB.loads, meta.loads || {});
         PRESENCE = meta.presence || {};
         if (meta.ctl) { LAST_CHANGE = meta.ctl; if (meta.ctl.build > BUILD) offerUpdate(meta.ctl.build); }
-        seedCats(); saveLocal();
+        seedCats();
+        if (mergeDuplicateCats()) {
+          try { await fbSend("PUT", "trucks", DB.trucks); await fbSend("PUT", "cats", DB.cats); bump("fleet"); } catch (e) { }
+        }
+        saveLocal();
       }
       setSync("ok");
     } catch (e) { setSync("err", e.message); }
